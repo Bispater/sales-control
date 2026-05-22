@@ -15,35 +15,10 @@ import { AuthService } from '../../services/auth.service';
         <div class="flex flex-col items-center mb-6">
           <span class="w-12 h-12 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold text-lg">CV</span>
           <h1 class="text-xl font-bold text-slate-900 mt-3">Control de Ventas</h1>
-          <p class="text-sm text-slate-500 mt-1">{{ modo() === 'login' ? 'Inicia sesión para continuar' : 'Crea tu cuenta' }}</p>
+          <p class="text-sm text-slate-500 mt-1">Inicia sesión para continuar</p>
         </div>
 
         <div class="bg-white rounded-xl shadow-card border border-slate-100 p-6">
-          <div class="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1 mb-5">
-            <button
-              type="button"
-              (click)="cambiar('login')"
-              class="text-sm font-medium py-2 rounded-md transition"
-              [class.bg-white]="modo() === 'login'"
-              [class.shadow-sm]="modo() === 'login'"
-              [class.text-slate-900]="modo() === 'login'"
-              [class.text-slate-500]="modo() !== 'login'"
-            >
-              Iniciar sesión
-            </button>
-            <button
-              type="button"
-              (click)="cambiar('registro')"
-              class="text-sm font-medium py-2 rounded-md transition"
-              [class.bg-white]="modo() === 'registro'"
-              [class.shadow-sm]="modo() === 'registro'"
-              [class.text-slate-900]="modo() === 'registro'"
-              [class.text-slate-500]="modo() !== 'registro'"
-            >
-              Crear cuenta
-            </button>
-          </div>
-
           <form (ngSubmit)="submit()" class="space-y-3">
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
@@ -65,7 +40,7 @@ import { AuthService } from '../../services/auth.service';
                 name="password"
                 required
                 minlength="6"
-                [autocomplete]="modo() === 'login' ? 'current-password' : 'new-password'"
+                autocomplete="current-password"
                 placeholder="••••••••"
                 class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               />
@@ -80,18 +55,11 @@ import { AuthService } from '../../services/auth.service';
               [disabled]="cargando()"
               class="w-full bg-slate-900 hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition"
             >
-              {{ cargando() ? 'Procesando...' : (modo() === 'login' ? 'Iniciar sesión' : 'Crear cuenta') }}
+              {{ cargando() ? 'Procesando...' : 'Iniciar sesión' }}
             </button>
           </form>
 
         </div>
-
-        <p class="text-center text-xs text-slate-400 mt-5">
-          {{ modo() === 'login' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?' }}
-          <button (click)="cambiar(modo() === 'login' ? 'registro' : 'login')" class="text-brand-600 hover:underline font-medium ml-1">
-            {{ modo() === 'login' ? 'Crear una cuenta' : 'Iniciar sesión' }}
-          </button>
-        </p>
       </div>
     </div>
   `,
@@ -101,16 +69,10 @@ export class LoginComponent {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
-  modo = signal<'login' | 'registro'>('login');
   email = '';
   password = '';
   error = signal<string>('');
   cargando = signal(false);
-
-  cambiar(m: 'login' | 'registro') {
-    this.modo.set(m);
-    this.error.set('');
-  }
 
   async submit() {
     if (!this.email || !this.password) {
@@ -120,11 +82,7 @@ export class LoginComponent {
     this.cargando.set(true);
     this.error.set('');
     try {
-      if (this.modo() === 'login') {
-        await this.authService.loginEmail(this.email, this.password);
-      } else {
-        await this.authService.registerEmail(this.email, this.password);
-      }
+      await this.authService.loginEmail(this.email, this.password);
       this.redirigir();
     } catch (e) {
       this.error.set(this.traducirError(e));

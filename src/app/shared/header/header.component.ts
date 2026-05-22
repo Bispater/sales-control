@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -114,12 +114,13 @@ import { DatasetService } from '../../services/dataset.service';
     <div *ngIf="abierto()" (click)="abierto.set(false)" class="fixed inset-0 z-30"></div>
   `,
 })
-export class HeaderComponent implements OnInit {
+export class HeaderComponent {
   authService = inject(AuthService);
   datasetService = inject(DatasetService);
   private router = inject(Router);
 
   abierto = signal(false);
+  private autoCargaIniciada = false;
 
   tabs = [
     { path: '/dashboard', label: 'Dashboard' },
@@ -131,15 +132,25 @@ export class HeaderComponent implements OnInit {
     { path: '/datos', label: 'Datos' },
   ];
 
-  async ngOnInit() {
-    if (this.authService.user()) {
-      const lista = await this.datasetService.listarAnios();
-      if (lista.length > 0 && this.datasetService.anioActivo() === null) {
-        // Elegir el año cargado más recientemente (por ultimaCarga), no el de mayor número.
-        const ultimo = lista.reduce((a, b) => (a.ultimaCarga > b.ultimaCarga ? a : b));
-        await this.datasetService.cargarAnio(ultimo.anio);
-      }
-    }
+  constructor() {
+    // El estado de autenticación de Firebase es asíncrono; reaccionamos cuando
+    // el usuario aparece para auto-cargar el dataset preferido (año en curso).
+    effect(() => {
+      const user = this.authService.user();
+      if (!user || this.autoCargaIniciada) return;
+      this.autoCargaIniciada = true;
+      this.autoCargar();
+    });
+  }
+
+  private async autoCargar(): Promise<void> {
+    const lista = await this.datasetService.listarAnios();
+    if (lista.length === 0 || this.datasetService.anioActivo() !== null) return;
+    const anioActual = new Date().getFullYear();
+    const elegido =
+      lista.find((a) => a.anio === anioActual) ??
+      lista.reduce((a, b) => (a.ultimaCarga > b.ultimaCarga ? a : b));
+    await this.datasetService.cargarAnio(elegido.anio);
   }
 
   async cambiarAnio(anio: number) {

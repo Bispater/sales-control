@@ -3,53 +3,104 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  OnInit,
   computed,
   effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
+import { CategoriasService } from '../../services/categorias.service';
 import { DatasetService } from '../../services/dataset.service';
+import { MetasService } from '../../services/metas.service';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
-import { KpiCardComponent } from '../../shared/kpi-card/kpi-card.component';
 import { ProgressBarComponent } from '../../shared/progress-bar/progress-bar.component';
 import { colorPorNombre, iniciales } from '../../utils/colores';
 
 Chart.register(...registerables);
 
-interface DesempenoVendedor {
+const MESES_LARGO = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+const CATEGORIAS = ['TERCEROS', 'HOLDING', 'TRABAJADORES'] as const;
+type Categoria = typeof CATEGORIAS[number];
+
+const COLOR_CATEGORIA: Record<Categoria, string> = {
+  TERCEROS: '#2563eb',
+  HOLDING: '#10b981',
+  TRABAJADORES: '#f59e0b',
+};
+
+interface MetricasCategoria {
+  ventasBrutas: number;
+  ventasNetas: number;
+  margen: number;
+  margenPct: number;
+  meta: number;
+  cumplimiento: number;
+  proyectado: number;
+}
+
+interface FilaVendedor {
   nombre: string;
   iniciales: string;
   color: string;
-  ventas: number;
+  ventasBrutas: number;
+  ventasNetas: number;
   margen: number;
   margenPct: number;
-  cantidad: number;
-  pctSobreMax: number;
+  meta: number;
+  cumplimiento: number;
+  proyectado: number;
 }
-
-const MESES_LARGO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, KpiCardComponent, AvatarComponent, ProgressBarComponent, EmptyStateComponent],
+  imports: [CommonModule, AvatarComponent, ProgressBarComponent, EmptyStateComponent],
   template: `
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">Control de Ventas</h1>
-        <p class="text-sm text-slate-500 mt-1">
-          {{ dataset.anioActivo() ? 'Resumen ejecutivo · Año ' + dataset.anioActivo() : 'Resumen ejecutivo' }}
-        </p>
+        <h1 class="text-2xl font-bold text-slate-900">Dashboard</h1>
+        <p class="text-sm text-slate-500 mt-1">Resumen del mes por categoría de cliente</p>
+      </div>
+
+      <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-1">
+        <button
+          (click)="mesAnterior()"
+          [disabled]="!puedeAnterior()"
+          class="w-8 h-8 inline-flex items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Mes anterior"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
+          </svg>
+        </button>
+        <span class="px-3 text-sm font-semibold text-slate-900 min-w-[140px] text-center">
+          {{ etiquetaMes() }}
+        </span>
+        <button
+          (click)="mesSiguiente()"
+          [disabled]="!puedeSiguiente()"
+          class="w-8 h-8 inline-flex items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Mes siguiente"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+          </svg>
+        </button>
       </div>
     </div>
 
     <ng-container *ngIf="dataset.cargando() || !listoParaCalcular(); else contenido">
       <div class="bg-white rounded-xl shadow-card border border-slate-100 p-12 flex flex-col items-center gap-3 text-slate-500 text-sm">
         <span class="inline-block w-6 h-6 border-2 border-slate-300 border-t-brand-600 rounded-full animate-spin"></span>
-        <span>Cargando dashboard del año {{ dataset.anioActivo() }}...</span>
+        <span>Cargando dashboard...</span>
       </div>
     </ng-container>
 
@@ -64,90 +115,115 @@ const MESES_LARGO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Se
       </ng-container>
 
       <ng-template #dataReady>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <app-kpi-card
-            titulo="Ventas Totales"
-            [valor]="formatoCLP(kpis().ventasTotales)"
-            [subtitulo]="kpis().transacciones + ' transacciones'"
-          ></app-kpi-card>
-
-          <app-kpi-card
-            titulo="Margen Neto"
-            [valor]="formatoCLP(kpis().margenTotal)"
-            [subtitulo]="(kpis().margenPct | number:'1.1-1') + '% margen'"
-          ></app-kpi-card>
-
-          <app-kpi-card
-            titulo="Venta Promedio"
-            [valor]="formatoCLP(kpis().promedio)"
-            [subtitulo]="kpis().filas + ' registros'"
-          ></app-kpi-card>
-
-          <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5">
-            <p class="text-sm text-slate-500 font-medium">Mejor Vendedor</p>
-            <div class="flex items-center gap-3 mt-2" *ngIf="kpis().mejorVendedor as mv">
-              <app-avatar [iniciales]="mv.iniciales" [color]="mv.color" size="md"></app-avatar>
-              <div class="min-w-0">
-                <p class="text-base font-bold text-slate-900 truncate">{{ mv.nombre }}</p>
-                <p class="text-xs text-slate-500">{{ formatoCLP(mv.ventas) }}</p>
-              </div>
+        <div class="space-y-3 mb-6">
+          <div *ngFor="let cat of categorias" class="space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" [style.backgroundColor]="colorCategoria(cat)"></span>
+              <span class="text-xs font-semibold uppercase tracking-wide text-slate-600">{{ cat }}</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2" *ngIf="metricasPorCategoria()[cat] as m">
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Ventas Brutas</p>
+                  <p class="text-sm font-bold text-slate-900 mt-1">{{ formatoCLP(m.ventasBrutas) }}</p>
+                </div>
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Ventas Netas</p>
+                  <p class="text-sm font-bold text-emerald-600 mt-1">{{ formatoCLP(m.ventasNetas) }}</p>
+                </div>
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Margen $</p>
+                  <p class="text-sm font-bold text-emerald-600 mt-1">{{ formatoCLP(m.margen) }}</p>
+                </div>
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Margen %</p>
+                  <p class="text-sm font-bold text-violet-600 mt-1">{{ m.margenPct | number:'1.1-1' }}%</p>
+                </div>
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Meta</p>
+                  <p class="text-sm font-bold text-slate-900 mt-1">{{ formatoCLP(m.meta) }}</p>
+                </div>
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Cumplimiento</p>
+                  <p class="text-sm font-bold mt-1" [class]="colorTextoPct(m.cumplimiento)">
+                    {{ m.meta > 0 ? (m.cumplimiento | number:'1.1-1') + '%' : '—' }}
+                  </p>
+                  <div class="mt-1.5" *ngIf="m.meta > 0">
+                    <app-progress-bar [valor]="m.cumplimiento" [alto]="4"></app-progress-bar>
+                  </div>
+                </div>
+                <div class="bg-white rounded-lg border border-slate-100 p-3">
+                  <p class="text-[10px] uppercase text-slate-500 font-medium tracking-wide">Proyectado</p>
+                  <p class="text-sm font-bold mt-1" [class]="colorTextoPct(m.proyectado)">
+                    {{ m.meta > 0 ? (m.proyectado | number:'1.1-1') + '%' : '—' }}
+                  </p>
+                </div>
             </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5">
-            <h3 class="text-base font-semibold text-slate-900 mb-4">Tendencia Mensual</h3>
-            <div class="h-64"><canvas #tendencia></canvas></div>
-          </div>
-          <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5">
-            <h3 class="text-base font-semibold text-slate-900 mb-4">Ventas por Vendedor</h3>
-            <div class="h-64"><canvas #barras></canvas></div>
-          </div>
+        <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5 mb-6">
+          <h3 class="text-base font-semibold text-slate-900 mb-4">Ventas Diarias del Mes por Categoría</h3>
+          <div class="h-72"><canvas #diarioCanvas></canvas></div>
         </div>
 
         <div class="bg-white rounded-xl shadow-card border border-slate-100 overflow-hidden">
-          <div class="p-5 border-b border-slate-100">
+          <div class="p-5 border-b border-slate-100 flex items-center justify-between">
             <h3 class="text-base font-semibold text-slate-900">Desempeño por Vendedor</h3>
+            <span class="text-xs italic text-slate-400">Haz clic en un vendedor para ver detalles</span>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full">
               <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
                   <th class="text-left px-5 py-3 font-semibold">Vendedor</th>
-                  <th class="text-left px-5 py-3 font-semibold">% del Top</th>
-                  <th class="text-left px-5 py-3 font-semibold">Ventas</th>
-                  <th class="text-left px-5 py-3 font-semibold">Margen</th>
-                  <th class="text-left px-5 py-3 font-semibold">Líneas</th>
+                  <th class="text-right px-5 py-3 font-semibold">Ventas Brutas</th>
+                  <th class="text-right px-5 py-3 font-semibold">Ventas Netas</th>
+                  <th class="text-right px-5 py-3 font-semibold">Margen $</th>
+                  <th class="text-right px-5 py-3 font-semibold">Margen %</th>
+                  <th class="text-right px-5 py-3 font-semibold">Meta</th>
+                  <th class="text-left px-5 py-3 font-semibold w-44">Cumplimiento</th>
+                  <th class="text-right px-5 py-3 font-semibold">Proyectado</th>
+                  <th class="px-3 py-3"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                <tr *ngFor="let v of desempeno()" class="hover:bg-slate-50">
+                <tr *ngIf="filasVendedores().length === 0">
+                  <td colspan="9" class="px-5 py-8 text-center text-sm text-slate-500">
+                    No hay ventas para este mes.
+                  </td>
+                </tr>
+                <tr *ngFor="let v of filasVendedores()" class="hover:bg-slate-50 cursor-pointer" (click)="abrirVendedor(v)">
                   <td class="px-5 py-3">
                     <div class="flex items-center gap-3">
                       <app-avatar [iniciales]="v.iniciales" [color]="v.color"></app-avatar>
                       <p class="text-sm font-medium text-slate-900">{{ v.nombre }}</p>
                     </div>
                   </td>
-                  <td class="px-5 py-3 w-64">
-                    <div class="flex items-center gap-2">
+                  <td class="px-5 py-3 text-right text-sm font-semibold text-slate-900">{{ formatoCLP(v.ventasBrutas) }}</td>
+                  <td class="px-5 py-3 text-right text-sm font-semibold text-emerald-600">{{ formatoCLP(v.ventasNetas) }}</td>
+                  <td class="px-5 py-3 text-right text-sm font-semibold text-emerald-600">{{ formatoCLP(v.margen) }}</td>
+                  <td class="px-5 py-3 text-right text-sm font-semibold text-violet-600">{{ v.margenPct | number:'1.1-1' }}%</td>
+                  <td class="px-5 py-3 text-right text-sm text-slate-700">{{ v.meta > 0 ? formatoCLP(v.meta) : '—' }}</td>
+                  <td class="px-5 py-3">
+                    <div *ngIf="v.meta > 0; else sinMeta" class="flex items-center gap-2">
                       <div class="flex-1">
-                        <app-progress-bar [valor]="v.pctSobreMax"></app-progress-bar>
+                        <app-progress-bar [valor]="v.cumplimiento" [alto]="6"></app-progress-bar>
                       </div>
-                      <span class="text-xs font-semibold text-slate-700 w-12 text-right">
-                        {{ v.pctSobreMax | number:'1.0-0' }}%
+                      <span class="text-xs font-semibold w-14 text-right" [class]="colorTextoPct(v.cumplimiento)">
+                        {{ v.cumplimiento | number:'1.1-1' }}%
                       </span>
                     </div>
+                    <ng-template #sinMeta>
+                      <span class="text-xs text-slate-400">Sin meta</span>
+                    </ng-template>
                   </td>
-                  <td class="px-5 py-3 text-sm font-semibold text-slate-900">{{ formatoCLP(v.ventas) }}</td>
-                  <td class="px-5 py-3">
-                    <div class="text-sm font-semibold text-emerald-600">{{ formatoCLP(v.margen) }}</div>
-                    <div class="text-xs text-slate-500">{{ v.margenPct | number:'1.1-1' }}%</div>
+                  <td class="px-5 py-3 text-right text-sm font-semibold" [class]="colorTextoPct(v.proyectado)">
+                    {{ v.meta > 0 ? (v.proyectado | number:'1.1-1') + '%' : '—' }}
                   </td>
-                  <td class="px-5 py-3">
-                    <span class="inline-flex items-center justify-center min-w-8 h-8 px-2 rounded-full bg-sky-100 text-sky-700 text-sm font-semibold">
-                      {{ v.cantidad | number }}
-                    </span>
+                  <td class="px-3 py-3 text-slate-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+                    </svg>
                   </td>
                 </tr>
               </tbody>
@@ -158,170 +234,308 @@ const MESES_LARGO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Se
     </ng-template>
   `,
 })
-export class DashboardComponent implements OnDestroy {
-  tendenciaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('tendencia');
-  barrasCanvas = viewChild<ElementRef<HTMLCanvasElement>>('barras');
+export class DashboardComponent implements OnInit, OnDestroy {
+  diarioCanvas = viewChild<ElementRef<HTMLCanvasElement>>('diarioCanvas');
+
   dataset = inject(DatasetService);
+  metasService = inject(MetasService);
+  categoriasService = inject(CategoriasService);
+  private router = inject(Router);
+
   listoParaCalcular = signal(false);
+  mesSeleccionado = signal<number>(this.mesInicial());
 
-  private charts: Chart[] = [];
+  categorias = CATEGORIAS;
 
-  kpis = computed(() => {
-    const rows = this.dataset.registros();
-    let ventas = 0;
-    let margen = 0;
-    const docs = new Set<string>();
-    const porVendedor = new Map<string, number>();
-    for (const r of rows) {
-      ventas += r.ventaTotalBruta;
-      margen += r.margen;
-      if (r.numeroDocumento) docs.add(r.numeroDocumento + '|' + r.sucursal);
-      if (r.vendedor) porVendedor.set(r.vendedor, (porVendedor.get(r.vendedor) ?? 0) + r.ventaTotalBruta);
-    }
-    type MejorVendedor = { nombre: string; iniciales: string; color: string; ventas: number };
-    let mejor: MejorVendedor | null = null;
-    let max = 0;
-    for (const [nombre, v] of porVendedor) {
-      if (v > max) {
-        max = v;
-        mejor = { nombre, iniciales: iniciales(nombre), color: colorPorNombre(nombre), ventas: v };
-      }
-    }
-    return {
-      ventasTotales: ventas,
-      margenTotal: margen,
-      margenPct: ventas > 0 ? (margen / ventas) * 100 : 0,
-      transacciones: docs.size,
-      filas: rows.length,
-      promedio: docs.size > 0 ? ventas / docs.size : 0,
-      mejorVendedor: mejor,
-    };
-  });
-
-  desempeno = computed<DesempenoVendedor[]>(() => {
-    const rows = this.dataset.registros();
-    const map = new Map<string, { ventas: number; margen: number; cantidad: number }>();
-    for (const r of rows) {
-      const v = r.vendedor?.trim();
-      if (!v) continue;
-      const prev = map.get(v) ?? { ventas: 0, margen: 0, cantidad: 0 };
-      prev.ventas += r.ventaTotalBruta;
-      prev.margen += r.margen;
-      prev.cantidad += 1;
-      map.set(v, prev);
-    }
-    const arr = Array.from(map.entries()).map(([nombre, { ventas, margen, cantidad }]) => ({
-      nombre,
-      iniciales: iniciales(nombre),
-      color: colorPorNombre(nombre),
-      ventas,
-      margen,
-      margenPct: ventas > 0 ? (margen / ventas) * 100 : 0,
-      cantidad,
-      pctSobreMax: 0,
-    }));
-    arr.sort((a, b) => b.ventas - a.ventas);
-    const max = arr[0]?.ventas ?? 1;
-    arr.forEach((v) => (v.pctSobreMax = max > 0 ? (v.ventas / max) * 100 : 0));
-    return arr;
-  });
-
-  tendenciaMensual = computed(() => {
-    const rows = this.dataset.registros();
-    const totales = Array(12).fill(0);
-    for (const r of rows) {
-      const m = r.mes;
-      if (m >= 1 && m <= 12) totales[m - 1] += r.ventaTotalBruta;
-    }
-    return totales;
-  });
+  private diarioChart?: Chart;
 
   constructor() {
     setTimeout(() => this.listoParaCalcular.set(true), 0);
+
     effect(() => {
-      // Suscripción explícita: canvases (viewChild signal) y datos (computed signals).
-      // El effect vuelve a dispararse cuando los canvases entran al DOM tras *ngIf.
-      const tend = this.tendenciaCanvas();
-      const barras = this.barrasCanvas();
-      const datosTendencia = this.tendenciaMensual();
-      const datosBarras = this.desempeno();
-      if (!tend || !barras) return;
-      queueMicrotask(() => this.render(datosTendencia, datosBarras));
+      const anio = this.dataset.anioActivo();
+      if (anio != null && this.metasService.anioCargado() !== anio) {
+        this.metasService.cargarAnio(anio);
+      }
+    });
+
+    effect(() => {
+      const anio = this.dataset.anioActivo();
+      const hoy = new Date();
+      const mesActual = hoy.getMonth() + 1;
+      if (anio === hoy.getFullYear()) {
+        this.mesSeleccionado.set(mesActual);
+      } else if (anio != null) {
+        this.mesSeleccionado.set(12);
+      }
+    }, { allowSignalWrites: true });
+
+    effect(() => {
+      const canvas = this.diarioCanvas();
+      const datos = this.seriesDiarias();
+      if (!canvas) return;
+      queueMicrotask(() => this.renderDiario(canvas, datos));
     });
   }
 
+  async ngOnInit() {
+    if (this.categoriasService.totalCargados() === 0) {
+      await this.categoriasService.cargar();
+    }
+    const anio = this.dataset.anioActivo();
+    if (anio != null && this.metasService.anioCargado() !== anio) {
+      await this.metasService.cargarAnio(anio);
+    }
+  }
+
   ngOnDestroy(): void {
-    this.charts.forEach((c) => c.destroy());
-    this.charts = [];
+    this.diarioChart?.destroy();
+  }
+
+  private mesInicial(): number {
+    return new Date().getMonth() + 1;
+  }
+
+  etiquetaMes(): string {
+    const anio = this.dataset.anioActivo();
+    const m = this.mesSeleccionado();
+    return MESES_LARGO[m - 1] + (anio ? ' ' + anio : '');
+  }
+
+  puedeAnterior(): boolean {
+    return this.mesSeleccionado() > 1;
+  }
+
+  puedeSiguiente(): boolean {
+    return this.mesSeleccionado() < 12;
+  }
+
+  mesAnterior(): void {
+    if (this.puedeAnterior()) this.mesSeleccionado.update((v) => v - 1);
+  }
+
+  mesSiguiente(): void {
+    if (this.puedeSiguiente()) this.mesSeleccionado.update((v) => v + 1);
+  }
+
+  abrirVendedor(v: FilaVendedor): void {
+    this.router.navigate(['/equipo'], {
+      queryParams: { vendedor: v.nombre, mes: this.mesSeleccionado() },
+    });
+  }
+
+  colorCategoria(c: Categoria): string {
+    return COLOR_CATEGORIA[c];
   }
 
   formatoCLP(n: number): string {
     return '$' + (Math.round(n) || 0).toLocaleString('es-CL');
   }
 
-  private render(datosTendencia: number[], datosBarras: DesempenoVendedor[]): void {
-    this.charts.forEach((c) => c.destroy());
-    this.charts = [];
+  colorTextoPct(pct: number): string {
+    if (pct >= 100) return 'text-emerald-600';
+    if (pct >= 75) return 'text-sky-600';
+    if (pct >= 50) return 'text-amber-600';
+    return 'text-rose-600';
+  }
 
-    const tendCanvas = this.tendenciaCanvas();
-    if (tendCanvas) {
-      const cfg: ChartConfiguration<'line'> = {
-        type: 'line',
-        data: {
-          labels: MESES_LARGO,
-          datasets: [
-            {
-              label: 'Ventas',
-              data: datosTendencia,
-              borderColor: '#2563eb',
-              backgroundColor: 'rgba(37, 99, 235, 0.1)',
-              tension: 0.35,
-              fill: true,
-              pointRadius: 3,
-              pointBackgroundColor: '#2563eb',
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { ticks: { font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-            x: { ticks: { font: { size: 10 } }, grid: { display: false } },
-          },
-        },
-      };
-      this.charts.push(new Chart(tendCanvas.nativeElement, cfg));
+  private registrosDelMes = computed(() => {
+    const mes = this.mesSeleccionado();
+    return this.dataset.registros().filter((r) => r.mes === mes);
+  });
+
+  private factorProyeccion = computed(() => {
+    const anio = this.dataset.anioActivo();
+    const mes = this.mesSeleccionado();
+    const hoy = new Date();
+    const anioHoy = hoy.getFullYear();
+    const mesHoy = hoy.getMonth() + 1;
+    if (anio == null) return 1;
+    if (anio < anioHoy || (anio === anioHoy && mes < mesHoy)) return 1; // mes cerrado
+    if (anio > anioHoy || (anio === anioHoy && mes > mesHoy)) return 0; // mes futuro
+    const diasMes = new Date(anio, mes, 0).getDate();
+    const diaHoy = Math.max(1, hoy.getDate());
+    return diasMes / diaHoy;
+  });
+
+  metricasPorCategoria = computed<Record<Categoria, MetricasCategoria>>(() => {
+    const rows = this.registrosDelMes();
+    const mapa = this.categoriasService.mapaPorRut();
+    const metas = this.metasService.metas();
+    const mes = this.mesSeleccionado();
+    const anio = this.dataset.anioActivo();
+    const factor = this.factorProyeccion();
+
+    const init = (): MetricasCategoria => ({
+      ventasBrutas: 0, ventasNetas: 0, margen: 0, margenPct: 0,
+      meta: 0, cumplimiento: 0, proyectado: 0,
+    });
+    const out: Record<Categoria, MetricasCategoria> = {
+      TERCEROS: init(), HOLDING: init(), TRABAJADORES: init(),
+    };
+
+    for (const r of rows) {
+      const rut = (r.clienteRut ?? '').trim().toUpperCase().replace(/\./g, '');
+      const cat = mapa.get(rut)?.categoria?.toUpperCase();
+      if (cat && (CATEGORIAS as readonly string[]).includes(cat)) {
+        const c = cat as Categoria;
+        out[c].ventasBrutas += r.ventaTotalBruta;
+        out[c].ventasNetas += r.ventaTotalNeta;
+        out[c].margen += r.margen;
+      }
     }
 
-    const barrasCanvas = this.barrasCanvas();
-    if (barrasCanvas) {
-      const top = datosBarras.slice(0, 10);
-      const cfg: ChartConfiguration<'bar'> = {
-        type: 'bar',
-        data: {
-          labels: top.map((v) => v.nombre.split(' ')[0]),
-          datasets: [
-            {
-              label: 'Ventas',
-              data: top.map((v) => v.ventas),
-              backgroundColor: top.map((v) => v.color),
-              borderRadius: 4,
+    for (const m of metas) {
+      if (m.anio !== anio || m.mes !== mes) continue;
+      const cat = (m.categoria ?? '').toUpperCase();
+      if ((CATEGORIAS as readonly string[]).includes(cat)) {
+        out[cat as Categoria].meta += m.metaClp;
+      }
+    }
+
+    for (const c of CATEGORIAS) {
+      const m = out[c];
+      m.margenPct = m.ventasBrutas > 0 ? (m.margen / m.ventasBrutas) * 100 : 0;
+      m.cumplimiento = m.meta > 0 ? (m.ventasBrutas / m.meta) * 100 : 0;
+      m.proyectado = m.meta > 0 ? (m.ventasBrutas * factor / m.meta) * 100 : 0;
+    }
+
+    return out;
+  });
+
+  seriesDiarias = computed<{ labels: number[]; datasets: { categoria: Categoria; data: number[] }[] }>(() => {
+    const anio = this.dataset.anioActivo() ?? new Date().getFullYear();
+    const mes = this.mesSeleccionado();
+    const diasMes = new Date(anio, mes, 0).getDate();
+    const labels = Array.from({ length: diasMes }, (_, i) => i + 1);
+    const mapa = this.categoriasService.mapaPorRut();
+
+    const por: Record<Categoria, number[]> = {
+      TERCEROS: Array(diasMes).fill(0),
+      HOLDING: Array(diasMes).fill(0),
+      TRABAJADORES: Array(diasMes).fill(0),
+    };
+
+    for (const r of this.registrosDelMes()) {
+      const rut = (r.clienteRut ?? '').trim().toUpperCase().replace(/\./g, '');
+      const cat = mapa.get(rut)?.categoria?.toUpperCase();
+      if (!cat || !(CATEGORIAS as readonly string[]).includes(cat)) continue;
+      const dia = r.dia;
+      if (dia >= 1 && dia <= diasMes) {
+        por[cat as Categoria][dia - 1] += r.ventaTotalBruta;
+      }
+    }
+
+    return {
+      labels,
+      datasets: CATEGORIAS.map((c) => ({ categoria: c, data: por[c] })),
+    };
+  });
+
+  filasVendedores = computed<FilaVendedor[]>(() => {
+    const rows = this.registrosDelMes();
+    const metas = this.metasService.metas();
+    const mes = this.mesSeleccionado();
+    const anio = this.dataset.anioActivo();
+    const factor = this.factorProyeccion();
+
+    const acum = new Map<string, { ventasBrutas: number; ventasNetas: number; margen: number; meta: number }>();
+    const display = new Map<string, string>(); // key normalizada → nombre original
+    const norm = (s: string) => s.trim().toUpperCase();
+
+    const obtener = (nombre: string) => {
+      const key = norm(nombre);
+      if (!display.has(key)) display.set(key, nombre.trim());
+      let prev = acum.get(key);
+      if (!prev) {
+        prev = { ventasBrutas: 0, ventasNetas: 0, margen: 0, meta: 0 };
+        acum.set(key, prev);
+      }
+      return prev;
+    };
+
+    for (const r of rows) {
+      if (!r.vendedor) continue;
+      const a = obtener(r.vendedor);
+      a.ventasBrutas += r.ventaTotalBruta;
+      a.ventasNetas += r.ventaTotalNeta;
+      a.margen += r.margen;
+    }
+
+    for (const m of metas) {
+      if (m.anio !== anio || m.mes !== mes || !m.vendedor) continue;
+      obtener(m.vendedor).meta += m.metaClp;
+    }
+
+    const filas: FilaVendedor[] = [];
+    for (const [key, a] of acum) {
+      const nombre = display.get(key) ?? key;
+      filas.push({
+        nombre,
+        iniciales: iniciales(nombre),
+        color: colorPorNombre(nombre),
+        ventasBrutas: a.ventasBrutas,
+        ventasNetas: a.ventasNetas,
+        margen: a.margen,
+        margenPct: a.ventasBrutas > 0 ? (a.margen / a.ventasBrutas) * 100 : 0,
+        meta: a.meta,
+        cumplimiento: a.meta > 0 ? (a.ventasBrutas / a.meta) * 100 : 0,
+        proyectado: a.meta > 0 ? (a.ventasBrutas * factor / a.meta) * 100 : 0,
+      });
+    }
+    filas.sort((x, y) => y.ventasBrutas - x.ventasBrutas);
+    return filas;
+  });
+
+  private renderDiario(
+    canvas: ElementRef<HTMLCanvasElement>,
+    series: { labels: number[]; datasets: { categoria: Categoria; data: number[] }[] },
+  ): void {
+    this.diarioChart?.destroy();
+    const cfg: ChartConfiguration<'line'> = {
+      type: 'line',
+      data: {
+        labels: series.labels.map(String),
+        datasets: series.datasets.map((d) => ({
+          label: d.categoria,
+          data: d.data,
+          borderColor: COLOR_CATEGORIA[d.categoria],
+          backgroundColor: COLOR_CATEGORIA[d.categoria] + '22',
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#fff',
+          pointBorderColor: COLOR_CATEGORIA[d.categoria],
+          pointBorderWidth: 2,
+          fill: false,
+        })),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: $${(ctx.parsed.y || 0).toLocaleString('es-CL')}`,
             },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { ticks: { font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-            x: { ticks: { font: { size: 10 } }, grid: { display: false } },
           },
         },
-      };
-      this.charts.push(new Chart(barrasCanvas.nativeElement, cfg));
-    }
+        scales: {
+          y: {
+            ticks: {
+              font: { size: 10 },
+              callback: (v) => '$' + Number(v).toLocaleString('es-CL'),
+            },
+            grid: { color: '#f1f5f9' },
+          },
+          x: {
+            title: { display: true, text: 'Día del Mes', font: { size: 11 } },
+            ticks: { font: { size: 10 } },
+            grid: { display: false },
+          },
+        },
+      },
+    };
+    this.diarioChart = new Chart(canvas.nativeElement, cfg);
   }
 }
