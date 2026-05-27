@@ -40,12 +40,6 @@ export const routes: Routes = [
     title: 'Productos | Control de Ventas',
   },
   {
-    path: 'metas',
-    canActivate: [authGuard],
-    loadComponent: () => import('./pages/metas/metas.component').then((m) => m.MetasComponent),
-    title: 'Metas | Control de Ventas',
-  },
-  {
     path: 'datos',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/datos/datos.component').then((m) => m.DatosComponent),

@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import {
   Component,
   ElementRef,
@@ -68,15 +69,18 @@ interface ProductoTop {
   ventasMonto: number;
   margen: number;
   margenPct: number;
+  descuentoPct: number;
+  clientesUnicos: number;
   pctMargenSobreMax: number;
   pctVentasSobreMax: number;
   pctUnidadesSobreMax: number;
+  pctCoberturaSobreMax: number;
 }
 
 @Component({
   selector: 'app-equipo',
   standalone: true,
-  imports: [CommonModule, AvatarComponent, BadgeComponent, ProgressBarComponent, EmptyStateComponent],
+  imports: [CommonModule, FormsModule, AvatarComponent, BadgeComponent, ProgressBarComponent, EmptyStateComponent],
   template: `
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
@@ -349,61 +353,80 @@ interface ProductoTop {
                   </ng-container>
                 </ng-container>
               </div>
-            </div>
 
-            <div class="bg-white rounded-xl border border-slate-100 p-5">
-              <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
-                <h3 class="text-base font-semibold text-slate-900 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 9V4.5M9 9h4.5M15 9c0 .621-.504 1.125-1.125 1.125H9.375A1.125 1.125 0 0 1 8.25 9V4.5M9 9V4.5"/>
-                  </svg>
-                  Top 10 Productos - Análisis de Margen
-                </h3>
-                <span *ngIf="topProductos().length > 0" class="text-xs text-slate-500">
-                  Ordenados por margen $ del mes
-                </span>
+              <!-- Cobertura Producto Foco (tarjeta separada) -->
+              <div class="bg-white rounded-xl border border-slate-100 p-5">
+                <div class="flex items-center justify-between gap-2 mb-4">
+                  <h3 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                    </svg>
+                    Cobertura Producto Foco
+                  </h3>
+                </div>
+                <div class="mb-3">
+                  <label class="block text-[11px] uppercase text-slate-500 font-medium mb-1">Producto foco del mes</label>
+                  <select
+                    [ngModel]="focoProducto()"
+                    (ngModelChange)="focoProducto.set($event)"
+                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Automático (mayor venta del mes)</option>
+                    <option *ngFor="let p of productosFocoOpciones()" [value]="p">{{ p }}</option>
+                  </select>
+                </div>
+                <ng-container *ngIf="coberturaFoco() as cf">
+                  <div class="bg-emerald-50/60 border border-emerald-100 rounded-lg p-4">
+                    <div class="flex items-start justify-between gap-2 mb-3">
+                      <div class="min-w-0">
+                        <p class="text-xs text-slate-500">Producto</p>
+                        <p class="text-sm font-bold text-slate-900 truncate" [title]="cf.foco">{{ cf.foco || '—' }}</p>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <p class="text-xs text-slate-500">Clientes con producto</p>
+                        <p class="text-2xl font-bold text-emerald-600">{{ cf.clientesConProducto }}</p>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                      <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
+                        <p class="text-[10px] text-slate-500">Ventas Brutas</p>
+                        <p class="text-sm font-bold text-slate-900">{{ formatoCLP(cf.ventasBrutas) }}</p>
+                      </div>
+                      <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
+                        <p class="text-[10px] text-slate-500">Margen $</p>
+                        <p class="text-sm font-bold text-emerald-600">{{ formatoCLP(cf.margen) }}</p>
+                      </div>
+                      <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
+                        <p class="text-[10px] text-slate-500">Margen %</p>
+                        <p class="text-sm font-bold text-violet-600">{{ cf.margenPct | number:'1.0-0' }}%</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between mb-1">
+                      <p class="text-sm text-slate-600">Cobertura</p>
+                      <p class="text-sm font-bold text-slate-900">{{ cf.cobertura | number:'1.0-0' }}%</p>
+                    </div>
+                    <app-progress-bar [valor]="cf.cobertura" [alto]="6" color="#10b981"></app-progress-bar>
+                    <p class="text-xs text-slate-500 text-center mt-1">{{ cf.clientesConProducto }} de {{ cf.totalClientes }} clientes</p>
+                  </div>
+                </ng-container>
               </div>
 
-              <ng-container *ngIf="topProductos() as productos">
-                <div *ngIf="productos.length === 0" class="text-sm text-slate-400 italic">Sin ventas en el mes.</div>
-                <div class="space-y-2">
-                  <div *ngFor="let p of productos; let i = index" class="border border-slate-100 rounded-lg p-3 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-start">
-                    <div class="min-w-0">
-                      <div class="flex items-center gap-2 mb-1">
-                        <span class="w-6 h-6 inline-flex items-center justify-center rounded-full text-white text-xs font-bold shrink-0"
-                              [class.bg-amber-400]="i === 0"
-                              [class.bg-slate-400]="i === 1"
-                              [class.bg-orange-400]="i === 2"
-                              [class.bg-sky-600]="i > 2">{{ i + 1 }}</span>
-                        <span class="text-sm font-semibold text-slate-900 truncate" [title]="p.nombre">{{ p.nombre }}</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 pl-8">
-                        <span *ngIf="p.marca"><span class="text-slate-400">Marca:</span> <span class="text-slate-700 font-medium">{{ p.marca }}</span></span>
-                        <span *ngIf="p.tipo"><span class="text-slate-400">Tipo:</span> <span class="text-slate-700 font-medium">{{ p.tipo }}</span></span>
-                        <span><span class="text-slate-400">Precio prom.:</span> <span class="text-slate-700 font-medium">{{ formatoCLP(p.precioPromedio) }}</span></span>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2 lg:justify-end">
-                      <span class="inline-flex items-center justify-center min-w-[64px] h-7 px-2 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold">{{ p.ventas }} ventas</span>
-                      <span class="inline-flex items-center justify-center min-w-[80px] h-7 px-2 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">{{ p.unidades | number }} und</span>
-                    </div>
-                    <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-3 pl-8">
-                      <div>
-                        <p class="text-xs text-slate-500">Ventas: <span class="font-bold text-slate-900">{{ formatoCLP(p.ventasMonto) }}</span></p>
-                        <div class="mt-1.5"><app-progress-bar [valor]="p.pctVentasSobreMax" [alto]="4" color="#0ea5e9"></app-progress-bar></div>
-                      </div>
-                      <div>
-                        <p class="text-xs text-slate-500">Margen: <span class="font-bold text-emerald-600">{{ formatoCLP(p.margen) }}</span> <span class="text-slate-500">({{ p.margenPct | number:'1.1-1' }}%)</span></p>
-                        <div class="mt-1.5"><app-progress-bar [valor]="p.pctMargenSobreMax" [alto]="4" color="#10b981"></app-progress-bar></div>
-                      </div>
-                      <div>
-                        <p class="text-xs text-slate-500">Unidades: <span class="font-bold text-slate-900">{{ p.unidades | number }}</span></p>
-                        <div class="mt-1.5"><app-progress-bar [valor]="p.pctUnidadesSobreMax" [alto]="4" color="#8b5cf6"></app-progress-bar></div>
-                      </div>
-                    </div>
-                  </div>
+              <!-- Cobranza (tarjeta separada) -->
+              <div class="bg-white rounded-xl border border-slate-100 p-5">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+                  </svg>
+                  Cobranza
+                </h3>
+                <div class="rounded-lg border border-dashed border-slate-200 p-6 text-center">
+                  <p class="text-sm text-slate-500">Sin datos de cobranza</p>
+                  <p class="text-xs text-slate-400 mt-1">
+                    Los días de atraso y montos en mora no están en el CSV de ventas.
+                    Sube un archivo de cobranza en Datos para activar esta tarjeta.
+                  </p>
                 </div>
-              </ng-container>
+              </div>
             </div>
 
             <div class="bg-white rounded-xl border border-slate-100 p-5">
@@ -415,6 +438,109 @@ interface ProductoTop {
                   <p class="text-lg font-bold text-sky-600 mt-1">{{ formatoCLP(m.valor) }}</p>
                 </div>
               </div>
+            </div>
+
+            <!-- Matriz de cumplimiento mensual -->
+            <div class="bg-white rounded-xl border border-slate-100 p-5" *ngIf="matrizCumplimiento() as mx">
+              <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 class="text-base font-semibold text-slate-900">Matriz de cumplimiento</h3>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-200"></span>≥100%</span>
+                  <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-200"></span>80–99%</span>
+                  <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded bg-rose-200"></span>&lt;80%</span>
+                  <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100"></span>sin meta</span>
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr>
+                      <th *ngFor="let m of MESES_CORTO" class="text-center text-[11px] uppercase text-slate-500 font-semibold px-1 py-2">{{ m }}</th>
+                      <th class="text-center text-[11px] uppercase text-slate-500 font-semibold px-2 py-2">Año</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td *ngFor="let c of mx.meses" class="px-1 py-1 align-top">
+                        <div class="rounded py-2 text-center min-w-[44px]" [class]="claseCelda(c)">
+                          <p class="text-xs font-bold">{{ c.meta > 0 ? (c.pct | number:'1.0-0') + '%' : '—' }}</p>
+                          <p class="text-[10px] opacity-75">{{ c.meta > 0 ? compactCLP(c.vendido) : '' }}</p>
+                        </div>
+                      </td>
+                      <td class="px-2 py-1 align-top">
+                        <div class="rounded py-2 text-center bg-slate-50 min-w-[70px]">
+                          <p class="text-xs font-bold" [class]="colorTextoPct(mx.pctAnual)">
+                            {{ mx.metaAnual > 0 ? (mx.pctAnual | number:'1.0-0') + '%' : '—' }}
+                          </p>
+                          <p class="text-[10px] text-slate-500">{{ compactCLP(mx.vendidoAnual) }} / {{ compactCLP(mx.metaAnual) }}</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Productos Top en Ventas -->
+            <div class="bg-white rounded-xl border border-slate-100 p-5">
+              <h3 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
+                </svg>
+                Productos Top en Ventas
+              </h3>
+              <ng-container *ngIf="topProductos() as productos">
+                <div *ngIf="productos.length === 0" class="text-sm text-slate-400 italic">Sin ventas en el mes.</div>
+                <div *ngIf="productos.length > 0" class="overflow-x-auto">
+                  <table class="w-full">
+                    <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
+                      <tr>
+                        <th class="text-left px-2 py-2 font-semibold">#</th>
+                        <th class="text-left px-2 py-2 font-semibold min-w-[160px]">Nombre del Producto</th>
+                        <th class="text-left px-2 py-2 font-semibold">Tipo</th>
+                        <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Precio Prom.</th>
+                        <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Ventas Brutas</th>
+                        <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Margen $</th>
+                        <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Margen %</th>
+                        <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Descuentos %</th>
+                        <th class="text-left px-2 py-2 font-semibold whitespace-nowrap">Cobertura</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                      <tr *ngFor="let p of productos; let i = index" class="hover:bg-slate-50">
+                        <td class="px-2 py-3">
+                          <span class="w-6 h-6 inline-flex items-center justify-center rounded-full text-white text-xs font-bold"
+                                [class.bg-amber-400]="i === 0"
+                                [class.bg-slate-400]="i === 1"
+                                [class.bg-orange-400]="i === 2"
+                                [class.bg-sky-600]="i > 2">{{ i + 1 }}</span>
+                        </td>
+                        <td class="px-2 py-3">
+                          <p class="text-sm font-medium text-slate-900 truncate max-w-[200px]" [title]="p.nombre">{{ p.nombre }}</p>
+                          <p *ngIf="p.marca" class="text-xs text-slate-400">{{ p.marca }}</p>
+                        </td>
+                        <td class="px-2 py-3">
+                          <span *ngIf="p.tipo" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" [class]="colorTipo(p.tipo)">{{ p.tipo }}</span>
+                          <span *ngIf="!p.tipo" class="text-xs text-slate-400">—</span>
+                        </td>
+                        <td class="px-2 py-3 text-right text-sm text-slate-700 whitespace-nowrap">{{ formatoCLP(p.precioPromedio) }}</td>
+                        <td class="px-2 py-3 text-right text-sm font-semibold text-sky-600 whitespace-nowrap">{{ formatoCLP(p.ventasMonto) }}</td>
+                        <td class="px-2 py-3 text-right text-sm font-semibold text-emerald-600 whitespace-nowrap">{{ formatoCLP(p.margen) }}</td>
+                        <td class="px-2 py-3 text-right text-sm font-medium text-emerald-600">{{ p.margenPct | number:'1.0-0' }}%</td>
+                        <td class="px-2 py-3 text-right text-sm font-medium" [class.text-rose-500]="p.descuentoPct >= 8" [class.text-amber-600]="p.descuentoPct >= 4 && p.descuentoPct < 8" [class.text-slate-500]="p.descuentoPct < 4">{{ p.descuentoPct | number:'1.0-0' }}%</td>
+                        <td class="px-2 py-3">
+                          <div class="flex items-center gap-2">
+                            <span class="text-sm font-semibold text-violet-600 w-6 text-right">{{ p.clientesUnicos }}</span>
+                            <div class="w-16">
+                              <app-progress-bar [valor]="p.pctCoberturaSobreMax" [alto]="6" color="#8b5cf6"></app-progress-bar>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </ng-container>
             </div>
           </section>
         </div>
@@ -436,6 +562,7 @@ export class EquipoComponent implements OnInit, OnDestroy {
   seleccionado = signal<string | null>(null);
 
   MESES_LARGO = MESES_LARGO;
+  MESES_CORTO = MESES_CORTO;
 
   private historialChart?: Chart;
 
@@ -711,7 +838,9 @@ export class EquipoComponent implements OnInit, OnDestroy {
       ventasMonto: number;
       margen: number;
       unidades: number;
+      descuentoBruto: number;
       docs: Set<string>;
+      clientes: Set<string>;
       marcas: Map<string, number>;
       tipos: Map<string, number>;
     };
@@ -721,13 +850,15 @@ export class EquipoComponent implements OnInit, OnDestroy {
       if (!nombre) continue;
       let prev = map.get(nombre);
       if (!prev) {
-        prev = { ventasMonto: 0, margen: 0, unidades: 0, docs: new Set(), marcas: new Map(), tipos: new Map() };
+        prev = { ventasMonto: 0, margen: 0, unidades: 0, descuentoBruto: 0, docs: new Set(), clientes: new Set(), marcas: new Map(), tipos: new Map() };
         map.set(nombre, prev);
       }
       prev.ventasMonto += r.ventaTotalBruta;
       prev.margen += r.margen;
       prev.unidades += r.cantidad || 0;
+      prev.descuentoBruto += r.descuentoBruto || 0;
       if (r.numeroDocumento) prev.docs.add(r.numeroDocumento);
+      if (r.clienteRut) prev.clientes.add(r.clienteRut.trim());
       const marca = (r.marca || '').trim();
       if (marca) prev.marcas.set(marca, (prev.marcas.get(marca) ?? 0) + 1);
       const tipo = (r.tipoProducto || '').trim();
@@ -748,19 +879,27 @@ export class EquipoComponent implements OnInit, OnDestroy {
       ventasMonto: x.ventasMonto,
       margen: x.margen,
       margenPct: x.ventasMonto > 0 ? (x.margen / x.ventasMonto) * 100 : 0,
+      // Descuento como % sobre la venta bruta antes de descuento.
+      descuentoPct: x.ventasMonto + x.descuentoBruto > 0
+        ? (x.descuentoBruto / (x.ventasMonto + x.descuentoBruto)) * 100
+        : 0,
+      clientesUnicos: x.clientes.size,
       pctMargenSobreMax: 0,
       pctVentasSobreMax: 0,
       pctUnidadesSobreMax: 0,
+      pctCoberturaSobreMax: 0,
     }));
-    arr.sort((a, b) => b.margen - a.margen);
+    arr.sort((a, b) => b.ventasMonto - a.ventasMonto);
     const top = arr.slice(0, 10);
     const maxV = Math.max(0, ...top.map((p) => p.ventasMonto));
     const maxM = Math.max(0, ...top.map((p) => p.margen));
     const maxU = Math.max(0, ...top.map((p) => p.unidades));
+    const maxC = Math.max(0, ...top.map((p) => p.clientesUnicos));
     top.forEach((p) => {
       p.pctVentasSobreMax = maxV > 0 ? (p.ventasMonto / maxV) * 100 : 0;
       p.pctMargenSobreMax = maxM > 0 ? (p.margen / maxM) * 100 : 0;
       p.pctUnidadesSobreMax = maxU > 0 ? (p.unidades / maxU) * 100 : 0;
+      p.pctCoberturaSobreMax = maxC > 0 ? (p.clientesUnicos / maxC) * 100 : 0;
     });
     return top;
   });
@@ -794,6 +933,138 @@ export class EquipoComponent implements OnInit, OnDestroy {
     }
     return out;
   });
+
+  // ---------- Matriz de cumplimiento (12 meses + año) ----------
+  matrizCumplimiento = computed<{
+    meses: { meta: number; vendido: number; pct: number }[];
+    metaAnual: number;
+    vendidoAnual: number;
+    pctAnual: number;
+  } | null>(() => {
+    const v = this.vendedorSeleccionado();
+    if (!v) return null;
+    const anio = this.dataset.anioActivo();
+    const vendido = this.historialMensual().data;
+    const norm = (s: string) => s.trim().toUpperCase();
+    const target = norm(v.nombre);
+
+    const metaMes = Array(12).fill(0);
+    for (const m of this.metasService.metas()) {
+      if (m.anio !== anio || norm(m.vendedor) !== target) continue;
+      if (m.mes >= 1 && m.mes <= 12) metaMes[m.mes - 1] += m.metaClp;
+    }
+
+    const meses: { meta: number; vendido: number; pct: number }[] = [];
+    let metaAnual = 0;
+    let vendidoAnual = 0;
+    for (let i = 0; i < 12; i++) {
+      const meta = metaMes[i];
+      const vend = vendido[i] ?? 0;
+      metaAnual += meta;
+      vendidoAnual += vend;
+      meses.push({ meta, vendido: vend, pct: meta > 0 ? (vend / meta) * 100 : 0 });
+    }
+    return { meses, metaAnual, vendidoAnual, pctAnual: metaAnual > 0 ? (vendidoAnual / metaAnual) * 100 : 0 };
+  });
+
+  // ---------- Cobertura producto foco del mes ----------
+  focoProducto = signal<string>(''); // '' = automático (top por venta del mes)
+
+  productosFocoOpciones = computed<string[]>(() => {
+    const { mes } = this.registrosVendedor();
+    const set = new Set<string>();
+    for (const r of mes) {
+      const p = (r.producto || '').trim();
+      if (p) set.add(p);
+    }
+    return Array.from(set).sort();
+  });
+
+  coberturaFoco = computed<{
+    foco: string;
+    ventasBrutas: number;
+    margen: number;
+    margenPct: number;
+    clientesConProducto: number;
+    totalClientes: number;
+    cobertura: number;
+  } | null>(() => {
+    const v = this.vendedorSeleccionado();
+    if (!v) return null;
+    const { mes } = this.registrosVendedor();
+    const totalClientes = this.cartera()?.total ?? 0;
+
+    let foco = this.focoProducto();
+    if (!foco) {
+      const tot = new Map<string, number>();
+      for (const r of mes) {
+        const p = (r.producto || '').trim();
+        if (p) tot.set(p, (tot.get(p) ?? 0) + r.ventaTotalBruta);
+      }
+      let best = '';
+      let max = 0;
+      tot.forEach((val, k) => {
+        if (val > max) {
+          max = val;
+          best = k;
+        }
+      });
+      foco = best;
+    }
+
+    let ventasBrutas = 0;
+    let margen = 0;
+    const clientes = new Set<string>();
+    for (const r of mes) {
+      if ((r.producto || '').trim() !== foco) continue;
+      ventasBrutas += r.ventaTotalBruta;
+      margen += r.margen;
+      if (r.clienteRut) clientes.add(r.clienteRut.trim());
+    }
+    return {
+      foco,
+      ventasBrutas,
+      margen,
+      margenPct: ventasBrutas > 0 ? (margen / ventasBrutas) * 100 : 0,
+      clientesConProducto: clientes.size,
+      totalClientes,
+      cobertura: totalClientes > 0 ? (clientes.size / totalClientes) * 100 : 0,
+    };
+  });
+
+  compactCLP(n: number): string {
+    if (!n) return '$0';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`;
+    return `${sign}$${abs.toFixed(0)}`;
+  }
+
+  claseCelda(c: { meta: number; pct: number }): string {
+    if (c.meta === 0) return 'bg-slate-100 text-slate-400';
+    if (c.pct >= 100) return 'bg-emerald-100 text-emerald-700';
+    if (c.pct >= 80) return 'bg-amber-100 text-amber-700';
+    return 'bg-rose-100 text-rose-700';
+  }
+
+  private paletaTipo = [
+    'bg-violet-100 text-violet-700',
+    'bg-sky-100 text-sky-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-cyan-100 text-cyan-700',
+    'bg-amber-100 text-amber-700',
+    'bg-rose-100 text-rose-700',
+    'bg-indigo-100 text-indigo-700',
+    'bg-slate-100 text-slate-700',
+  ];
+
+  colorTipo(tipo: string): string {
+    if (!tipo) return 'bg-slate-100 text-slate-500';
+    let h = 0;
+    for (let i = 0; i < tipo.length; i++) h = (h * 31 + tipo.charCodeAt(i)) >>> 0;
+    return this.paletaTipo[h % this.paletaTipo.length];
+  }
 
   private calcRendimiento(meta: number, cumplimiento: number): Rendimiento {
     if (meta <= 0) return 'Sin meta';
