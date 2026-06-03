@@ -265,11 +265,16 @@ const FOCO_STORAGE = 'control-ventas:productos-foco:v1';
         <span class="absolute inset-y-0 left-3 flex items-center text-slate-400">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
         </span>
-        <input [ngModel]="busquedaFoco()" (ngModelChange)="busquedaFoco.set($event)" placeholder="Buscar producto por nombre..."
+        <input [ngModel]="busquedaFoco()" (ngModelChange)="busquedaFoco.set($event)"
+               (focus)="focoAbierto.set(true)" (blur)="cerrarPanelFoco()"
+               placeholder="Buscar producto por nombre... (clic para ver todos)"
                class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white" />
       </div>
-      <div *ngIf="busquedaFoco().trim()" class="border border-slate-100 rounded-lg divide-y divide-slate-50 max-h-56 overflow-y-auto mb-5">
-        <button *ngFor="let p of sugerenciasFoco()" (click)="agregarFoco(p)"
+      <div *ngIf="focoAbierto() || busquedaFoco().trim()" class="border border-slate-100 rounded-lg divide-y divide-slate-50 max-h-72 overflow-y-auto mb-5">
+        <div class="px-3 py-1.5 text-[11px] text-slate-400 bg-slate-50 sticky top-0">
+          {{ busquedaFoco().trim() ? (sugerenciasFoco().length + ' coincidencia(s)') : ('Todos los productos (' + sugerenciasFoco().length + ')') }}
+        </div>
+        <button *ngFor="let p of sugerenciasFoco()" (mousedown)="$event.preventDefault(); agregarFoco(p)"
                 class="w-full flex items-center justify-between px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
           <span class="truncate">{{ p }}</span>
           <span class="inline-flex items-center gap-1 text-xs text-brand-600 font-medium shrink-0 ml-2">
@@ -277,7 +282,9 @@ const FOCO_STORAGE = 'control-ventas:productos-foco:v1';
             Agregar
           </span>
         </button>
-        <p *ngIf="sugerenciasFoco().length === 0" class="px-3 py-3 text-sm text-slate-400">Sin coincidencias.</p>
+        <p *ngIf="sugerenciasFoco().length === 0" class="px-3 py-3 text-sm text-slate-400">
+          {{ productosOpciones().length === 0 ? 'No hay productos cargados. Importa un dataset de ventas.' : 'Sin coincidencias.' }}
+        </p>
       </div>
 
       <div class="border-t border-slate-100 pt-5">
@@ -393,6 +400,7 @@ export class DatosComponent implements OnInit {
   mesFoco = signal<number>(new Date().getMonth() + 1);
   anioFoco = signal<number>(this.anioActual);
   busquedaFoco = signal('');
+  focoAbierto = signal(false);
   focoData = signal<Record<string, string[]>>({}); // clave "anio-mes" -> productos
   focoGuardado = signal('');
 
@@ -407,13 +415,13 @@ export class DatosComponent implements OnInit {
 
   focoDelMes = computed<string[]>(() => this.focoDe(this.mesFoco()));
 
+  // Sin texto: muestra TODOS los productos (que no sean ya foco del mes).
+  // Con texto: filtra por coincidencia.
   sugerenciasFoco = computed<string[]>(() => {
     const t = this.busquedaFoco().toLowerCase().trim();
-    if (!t) return [];
     const yaFoco = new Set(this.focoDelMes());
-    return this.productosOpciones()
-      .filter((p) => p.toLowerCase().includes(t) && !yaFoco.has(p))
-      .slice(0, 20);
+    const base = this.productosOpciones().filter((p) => !yaFoco.has(p));
+    return t ? base.filter((p) => p.toLowerCase().includes(t)) : base;
   });
 
   async ngOnInit() {
@@ -543,6 +551,11 @@ export class DatosComponent implements OnInit {
 
   focoDe(mes: number): string[] {
     return this.focoData()[this.claveFoco(mes)] ?? [];
+  }
+
+  cerrarPanelFoco(): void {
+    // Pequeño delay para que un clic en una sugerencia se registre antes de cerrar.
+    setTimeout(() => this.focoAbierto.set(false), 150);
   }
 
   agregarFoco(producto: string): void {
