@@ -1,13 +1,25 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnDestroy,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { RegistroVenta } from '../../models/dataset';
 import { DatasetService } from '../../services/dataset.service';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 
+Chart.register(...registerables);
+
 const PAGE_SIZE = 24;
 
-type Estado = 'Activo' | 'Nuevo' | 'Desactivo';
+type Estado = 'Activo' | 'Nuevo' | 'Inactivo' | 'Bloqueado';
 
 interface ResumenCliente {
   rut: string;
@@ -75,7 +87,7 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
       </ng-container>
 
       <ng-template #ok>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
           <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5 flex items-start justify-between">
             <div>
               <p class="text-sm text-slate-500">Total Clientes</p>
@@ -90,7 +102,7 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
               <p class="text-sm text-slate-500">Clientes Activos</p>
               <p class="text-3xl font-bold text-slate-900 mt-2">{{ kpis().activos | number }}</p>
             </div>
-            <span class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+            <span class="p-2 rounded-lg bg-blue-50 text-blue-600">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.307a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941"/></svg>
             </span>
           </div>
@@ -99,17 +111,26 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
               <p class="text-sm text-slate-500">Clientes Nuevos</p>
               <p class="text-3xl font-bold text-slate-900 mt-2">{{ kpis().nuevos | number }}</p>
             </div>
-            <span class="p-2 rounded-lg bg-sky-50 text-sky-600">
+            <span class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
             </span>
           </div>
           <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5 flex items-start justify-between">
             <div>
-              <p class="text-sm text-slate-500">Facturación Total</p>
-              <p class="text-3xl font-bold text-slate-900 mt-2">{{ formatoCLP(kpis().facturacion) }}</p>
+              <p class="text-sm text-slate-500">Clientes Inactivos</p>
+              <p class="text-3xl font-bold text-slate-900 mt-2">{{ kpis().inactivos | number }}</p>
             </div>
-            <span class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.307a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941"/></svg>
+            <span class="p-2 rounded-lg bg-amber-50 text-amber-600">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+            </span>
+          </div>
+          <div class="bg-white rounded-xl shadow-card border border-slate-100 p-5 flex items-start justify-between">
+            <div>
+              <p class="text-sm text-slate-500">Clientes Bloqueados</p>
+              <p class="text-3xl font-bold text-slate-900 mt-2">{{ kpis().bloqueados | number }}</p>
+            </div>
+            <span class="p-2 rounded-lg bg-rose-50 text-rose-600">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
             </span>
           </div>
         </div>
@@ -134,7 +155,8 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
             <option value="">Todos los estados</option>
             <option value="Activo">Activos</option>
             <option value="Nuevo">Nuevos</option>
-            <option value="Desactivo">Desactivos</option>
+            <option value="Inactivo">Inactivos</option>
+            <option value="Bloqueado">Bloqueados</option>
           </select>
           <select
             [ngModel]="vendedorFiltro()"
@@ -305,23 +327,14 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
             </div>
           </section>
 
+          <!-- Gráfico de historial de ventas (últimos 12 meses al mes actual) -->
           <section>
-            <h4 class="text-sm font-semibold text-slate-900 mb-3">Top 10 Productos · Más Comprados</h4>
-            <div *ngIf="topProductos().length === 0" class="text-sm text-slate-400">Sin compras registradas.</div>
-            <div class="space-y-2">
-              <div *ngFor="let p of topProductos(); let i = index" class="flex items-center justify-between border border-slate-100 rounded-lg p-3">
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="w-6 h-6 inline-flex items-center justify-center rounded-full bg-sky-600 text-white text-xs font-bold shrink-0">{{ i + 1 }}</span>
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium text-slate-900 truncate" [title]="p.nombre">{{ p.nombre }}</p>
-                    <p class="text-xs text-slate-500">{{ p.cantidad | number }} unidades · {{ formatoCLP(p.monto) }}</p>
-                  </div>
-                </div>
-                <span class="text-sm font-bold text-slate-700 shrink-0 ml-3">{{ p.cantidad | number }}</span>
-              </div>
-            </div>
+            <h4 class="text-sm font-semibold text-slate-900 mb-3">Historial de Ventas · Últimos 12 meses</h4>
+            <div *ngIf="historialGrafico().total === 0" class="text-sm text-slate-400">Sin ventas en los últimos 12 meses.</div>
+            <div class="h-60" [class.hidden]="historialGrafico().total === 0"><canvas #histCanvas></canvas></div>
           </section>
 
+          <!-- Historial de Ventas (lista) — ahora prioritario, sobre el Top 10 -->
           <section>
             <h4 class="text-sm font-semibold text-slate-900 mb-3">Historial de Ventas</h4>
             <div *ngIf="historial().length === 0" class="text-sm text-slate-400">Sin compras registradas.</div>
@@ -343,15 +356,35 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
               </div>
             </div>
           </section>
+
+          <!-- Top 10 productos — venta bruta como foco a la derecha -->
+          <section>
+            <h4 class="text-sm font-semibold text-slate-900 mb-3">Top 10 Productos · Por Venta Bruta</h4>
+            <div *ngIf="topProductos().length === 0" class="text-sm text-slate-400">Sin compras registradas.</div>
+            <div class="space-y-2">
+              <div *ngFor="let p of topProductos(); let i = index" class="flex items-center justify-between border border-slate-100 rounded-lg p-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="w-6 h-6 inline-flex items-center justify-center rounded-full bg-sky-600 text-white text-xs font-bold shrink-0">{{ i + 1 }}</span>
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-slate-900 truncate" [title]="p.nombre">{{ p.nombre }}</p>
+                    <p class="text-xs text-slate-500">{{ p.cantidad | number }} unidades</p>
+                  </div>
+                </div>
+                <span class="text-sm font-bold text-emerald-600 shrink-0 ml-3 whitespace-nowrap">{{ formatoCLP(p.monto) }}</span>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
   `,
 })
-export class ClientesComponent {
+export class ClientesComponent implements OnDestroy {
   dataset = inject(DatasetService);
   Math = Math;
   pageSize = PAGE_SIZE;
+
+  histCanvas = viewChild<ElementRef<HTMLCanvasElement>>('histCanvas');
 
   listoParaCalcular = signal(false);
 
@@ -361,13 +394,35 @@ export class ClientesComponent {
   pagina = signal(0);
   seleccionado = signal<ResumenCliente | null>(null);
 
+  // RUTs con ventas impagas/pendientes (cliente bloqueado). Vendrá del módulo
+  // de cobranza; por ahora vacío hasta integrar esos datos.
+  impagasApp = signal<Set<string>>(new Set());
+
+  private historialChart?: Chart;
+
   constructor() {
     setTimeout(() => this.listoParaCalcular.set(true), 0);
+
+    effect(() => {
+      const canvas = this.histCanvas();
+      const serie = this.historialGrafico();
+      if (!canvas) return;
+      queueMicrotask(() => this.renderHistorial(canvas, serie));
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.historialChart?.destroy();
+  }
+
+  private normalizarRut(rut: string): string {
+    return rut.trim().toUpperCase().replace(/\./g, '');
   }
 
   todosClientes = computed<ResumenCliente[]>(() => {
     const hoy = this.fechaReferencia();
-    const map = new Map<string, ResumenCliente & { _vendedores: Map<string, number> }>();
+    const impagas = this.impagasApp();
+    const map = new Map<string, ResumenCliente & { _vendedores: Map<string, number>; _rutNorm: string }>();
     for (const r of this.dataset.registros()) {
       const id = (r.clienteRut?.trim() || r.nombreCliente?.trim() || '').toUpperCase();
       if (!id) continue;
@@ -388,8 +443,9 @@ export class ClientesComponent {
           primerCompra: null,
           ultimaCompra: null,
           vendedorPrincipal: '',
-          estado: 'Desactivo',
+          estado: 'Inactivo',
           _vendedores: new Map<string, number>(),
+          _rutNorm: r.clienteRut ? this.normalizarRut(r.clienteRut) : '',
         };
         map.set(id, prev);
       }
@@ -426,8 +482,10 @@ export class ClientesComponent {
         if (v > max) { max = v; topVendedor = k; }
       });
       c.vendedorPrincipal = topVendedor;
-      c.estado = this.calcularEstado(c.primerCompra, c.ultimaCompra, hoy);
+      const bloqueado = !!c._rutNorm && impagas.has(c._rutNorm);
+      c.estado = this.calcularEstado(c.primerCompra, c.ultimaCompra, hoy, bloqueado);
       delete (c as { _vendedores?: Map<string, number> })._vendedores;
+      delete (c as { _rutNorm?: string })._rutNorm;
       return c as ResumenCliente;
     });
     arr.sort((a, b) => b.facturacion - a.facturacion);
@@ -469,13 +527,15 @@ export class ClientesComponent {
 
   kpis = computed(() => {
     const lista = this.todosClientes();
-    let activos = 0, nuevos = 0, facturacion = 0;
+    let activos = 0, nuevos = 0, inactivos = 0, bloqueados = 0, facturacion = 0;
     for (const c of lista) {
       if (c.estado === 'Activo') activos++;
       else if (c.estado === 'Nuevo') nuevos++;
+      else if (c.estado === 'Inactivo') inactivos++;
+      else if (c.estado === 'Bloqueado') bloqueados++;
       facturacion += c.facturacion;
     }
-    return { total: lista.length, activos, nuevos, facturacion };
+    return { total: lista.length, activos, nuevos, inactivos, bloqueados, facturacion };
   });
 
   historial = computed<VentaCliente[]>(() => {
@@ -498,6 +558,31 @@ export class ClientesComponent {
     return items.slice(0, 20);
   });
 
+  // Serie mensual: 12 meses terminando en el mes de referencia (mes actual).
+  historialGrafico = computed<{ labels: string[]; data: number[]; total: number }>(() => {
+    const c = this.seleccionado();
+    if (!c) return { labels: [], data: [], total: 0 };
+    const ref = this.fechaReferencia();
+    const meses: { y: number; m: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1);
+      meses.push({ y: d.getFullYear(), m: d.getMonth() });
+    }
+    const data = Array(12).fill(0);
+    const clienteId = (c.rut || c.nombre).toUpperCase();
+    for (const r of this.dataset.registros()) {
+      const id = (r.clienteRut?.trim() || r.nombreCliente?.trim() || '').toUpperCase();
+      if (id !== clienteId) continue;
+      const f = this.parsearFecha(r);
+      if (!f) continue;
+      const idx = meses.findIndex((x) => x.y === f.getFullYear() && x.m === f.getMonth());
+      if (idx >= 0) data[idx] += r.ventaTotalBruta;
+    }
+    const labels = meses.map((x) => MESES_CORTO[x.m] + " '" + String(x.y).slice(2));
+    const total = data.reduce((a, b) => a + b, 0);
+    return { labels, data, total };
+  });
+
   topProductos = computed<ProductoCliente[]>(() => {
     const c = this.seleccionado();
     if (!c) return [];
@@ -513,15 +598,17 @@ export class ClientesComponent {
       prev.cantidad += r.cantidad || 0;
       prev.monto += r.ventaTotalBruta;
     }
-    return Array.from(map.values()).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
+    return Array.from(map.values()).sort((a, b) => b.monto - a.monto).slice(0, 10);
   });
 
   abrir(c: ResumenCliente) { this.seleccionado.set(c); }
   cerrar() { this.seleccionado.set(null); }
 
   badgeClases(e: Estado): string {
-    if (e === 'Activo') return 'bg-emerald-100 text-emerald-700';
-    if (e === 'Nuevo') return 'bg-sky-100 text-sky-700';
+    if (e === 'Nuevo') return 'bg-emerald-100 text-emerald-700';
+    if (e === 'Activo') return 'bg-blue-100 text-blue-700';
+    if (e === 'Inactivo') return 'bg-amber-100 text-amber-700';
+    if (e === 'Bloqueado') return 'bg-rose-100 text-rose-700';
     return 'bg-slate-200 text-slate-600';
   }
 
@@ -536,6 +623,15 @@ export class ClientesComponent {
 
   formatoCLP(n: number): string {
     return '$' + (Math.round(n) || 0).toLocaleString('es-CL');
+  }
+
+  private compactCLP(n: number): string {
+    if (!n) return '$0';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`;
+    return `${sign}$${abs.toFixed(0)}`;
   }
 
   fechaCorta(d: Date | null): string {
@@ -556,7 +652,6 @@ export class ClientesComponent {
     const anio = this.dataset.anioActivo();
     if (anio == null) return hoy;
     if (anio === hoy.getFullYear()) return hoy;
-    // Año pasado o futuro respecto al actual: tomar último día con datos
     let maxTs = 0;
     for (const r of this.dataset.registros()) {
       const f = this.parsearFecha(r);
@@ -565,13 +660,20 @@ export class ClientesComponent {
     return maxTs > 0 ? new Date(maxTs) : new Date(anio, 11, 31);
   }
 
-  private calcularEstado(primera: Date | null, ultima: Date | null, hoy: Date): Estado {
-    if (!ultima) return 'Desactivo';
-    const diasDesdeUltima = (hoy.getTime() - ultima.getTime()) / 86400000;
-    const diasDesdePrimera = primera ? (hoy.getTime() - primera.getTime()) / 86400000 : Infinity;
-    if (diasDesdePrimera <= 60) return 'Nuevo';
-    if (diasDesdeUltima <= 180) return 'Activo';
-    return 'Desactivo';
+  // Reglas:
+  //  - Bloqueado: cliente con venta impaga/pendiente (flag, prioridad alta).
+  //  - Nuevo: su primera compra ocurre en el mes en curso.
+  //  - Activo: tiene ventas en los últimos 6 meses.
+  //  - Inactivo: no tiene ventas en los últimos 6 meses.
+  private calcularEstado(primera: Date | null, ultima: Date | null, hoy: Date, bloqueado: boolean): Estado {
+    if (bloqueado) return 'Bloqueado';
+    if (!ultima) return 'Inactivo';
+    if (primera && primera.getFullYear() === hoy.getFullYear() && primera.getMonth() === hoy.getMonth()) {
+      return 'Nuevo';
+    }
+    const limite6m = new Date(hoy.getFullYear(), hoy.getMonth() - 6, hoy.getDate());
+    if (ultima >= limite6m) return 'Activo';
+    return 'Inactivo';
   }
 
   private parsearFecha(r: RegistroVenta): Date | null {
@@ -585,5 +687,66 @@ export class ClientesComponent {
     const dmy = txt.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
     if (dmy) return new Date(+dmy[3], +dmy[2] - 1, +dmy[1]);
     return null;
+  }
+
+  private renderHistorial(
+    canvas: ElementRef<HTMLCanvasElement>,
+    serie: { labels: string[]; data: number[]; total: number },
+  ): void {
+    this.historialChart?.destroy();
+    if (serie.total === 0) return;
+
+    const compact = (n: number) => this.compactCLP(n);
+    const etiquetaValores = {
+      id: 'etiquetaValores',
+      afterDatasetsDraw(chart: Chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.fillStyle = '#065f46';
+        ctx.font = '600 10px sans-serif';
+        ctx.textAlign = 'center';
+        meta.data.forEach((bar, idx) => {
+          const val = serie.data[idx];
+          if (!val) return;
+          ctx.fillText(compact(val), bar.x, bar.y - 5);
+        });
+        ctx.restore();
+      },
+    };
+
+    const cfg: ChartConfiguration<'bar'> = {
+      type: 'bar',
+      data: {
+        labels: serie.labels,
+        datasets: [
+          {
+            label: 'Ventas',
+            data: serie.data,
+            backgroundColor: '#10b981',
+            hoverBackgroundColor: '#059669',
+            borderRadius: 4,
+            maxBarThickness: 34,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: { label: (ctx) => '$' + (ctx.parsed.y || 0).toLocaleString('es-CL') },
+          },
+        },
+        scales: {
+          y: { display: false, beginAtZero: true, grace: '12%' },
+          x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+      plugins: [etiquetaValores],
+    };
+    this.historialChart = new Chart(canvas.nativeElement, cfg);
   }
 }

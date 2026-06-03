@@ -59,6 +59,13 @@ interface MetricasVendedor {
   diferenciaMeta: number;
 }
 
+interface CobranzaItem {
+  cliente: string;
+  dias: number;       // total de días de atraso
+  porcentaje: number; // % (definición pendiente de los datos de cobranza)
+  moraClp: number;    // monto en mora en CLP
+}
+
 interface ProductoTop {
   nombre: string;
   marca: string;
@@ -301,56 +308,104 @@ interface ProductoTop {
                   Cartera de Clientes
                 </h3>
                 <ng-container *ngIf="cartera() as c">
-                  <div class="bg-sky-50/60 border border-sky-100 rounded-lg p-4 mb-3 flex items-center justify-between">
-                    <div>
-                      <p class="text-xs text-slate-500">Total de Clientes</p>
-                      <p class="text-2xl font-bold text-slate-900 mt-1">{{ c.total }}</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <!-- Total de Clientes -->
+                    <div class="bg-sky-50/60 border border-sky-100 rounded-lg p-4 flex items-center justify-between">
+                      <div>
+                        <p class="text-xs text-slate-500">Total de Clientes</p>
+                        <p class="text-2xl font-bold text-slate-900 mt-1">{{ c.total }}</p>
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-sky-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>
+                      </svg>
                     </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-sky-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>
-                    </svg>
+                    <!-- Clientes Visitados (con tasa de visita bajo el ícono) -->
+                    <div class="bg-emerald-50/60 border border-emerald-100 rounded-lg p-4 flex items-center justify-between">
+                      <div>
+                        <p class="text-xs text-slate-500">Clientes Visitados</p>
+                        <p class="text-2xl font-bold text-slate-900 mt-1">{{ c.visitados ?? '—' }}</p>
+                      </div>
+                      <div class="flex flex-col items-center gap-1 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+                        </svg>
+                        <span class="text-[10px] font-semibold text-emerald-700 leading-none">
+                          {{ c.tasaVisita != null ? (c.tasaVisita | number:'1.0-0') + '%' : '—' }}
+                        </span>
+                      </div>
+                    </div>
+                    <!-- Clientes sin Visitar -->
+                    <div class="bg-amber-50/60 border border-amber-100 rounded-lg p-4 flex items-center justify-between">
+                      <div>
+                        <p class="text-xs text-slate-500">Clientes sin Visitar</p>
+                        <p class="text-2xl font-bold text-slate-900 mt-1">{{ c.sinVisitar }}</p>
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/>
+                      </svg>
+                    </div>
+                    <!-- Clientes con Ventas -->
+                    <div class="bg-violet-50/60 border border-violet-100 rounded-lg p-4 flex items-center justify-between">
+                      <div>
+                        <p class="text-xs text-slate-500">Clientes con Ventas</p>
+                        <p class="text-2xl font-bold text-slate-900 mt-1">{{ c.conVentas }}</p>
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-violet-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"/>
+                      </svg>
+                    </div>
                   </div>
-                  <div class="bg-emerald-50/60 border border-emerald-100 rounded-lg p-4 mb-3 flex items-center justify-between">
-                    <div>
-                      <p class="text-xs text-slate-500">Clientes Visitados</p>
-                      <p class="text-2xl font-bold text-slate-900 mt-1">{{ c.visitados }}</p>
+
+                  <!-- Lista scroll de clientes no visitados (métrica de la app del vendedor) -->
+                  <div class="mt-4">
+                    <p class="text-xs text-slate-500 mb-2">Clientes sin visitar</p>
+                    <div class="border border-slate-100 rounded-lg max-h-56 overflow-y-auto">
+                      <ng-container *ngIf="c.noVisitados.length > 0; else sinMetricaVisitas">
+                        <div *ngFor="let n of c.noVisitados" class="flex items-center gap-2 px-3 py-2 border-b border-slate-50 last:border-b-0">
+                          <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                          <span class="text-sm text-slate-700 truncate">{{ n }}</span>
+                        </div>
+                      </ng-container>
+                      <ng-template #sinMetricaVisitas>
+                        <div class="px-3 py-8 text-center">
+                          <p class="text-sm text-slate-500">Pendiente de la app</p>
+                          <p class="text-xs text-slate-400 mt-1">La lista de clientes no visitados se activará cuando el vendedor registre las visitas desde la aplicación.</p>
+                        </div>
+                      </ng-template>
                     </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
-                    </svg>
-                  </div>
-                  <div class="border border-slate-100 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                      <p class="text-sm text-slate-600">Tasa de Visita</p>
-                      <p class="text-sm font-bold text-slate-900">{{ c.tasaVisita | number:'1.0-0' }}%</p>
-                    </div>
-                    <app-progress-bar [valor]="c.tasaVisita" [alto]="6" color="#0f172a"></app-progress-bar>
                   </div>
                 </ng-container>
               </div>
 
-              <div class="bg-white rounded-xl border border-slate-100 p-5">
-                <h3 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <div class="bg-white rounded-xl border border-slate-100 p-5 flex flex-col">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2 shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.307a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941"/>
                   </svg>
                   Clientes Nuevos del Mes
                 </h3>
                 <ng-container *ngIf="clientesNuevos() as cn">
-                  <div class="rounded-lg p-6 mb-4 text-center bg-gradient-to-br from-emerald-50 to-emerald-100/40 border border-emerald-100">
+                  <div class="rounded-lg p-5 mb-4 text-center bg-gradient-to-br from-emerald-50 to-emerald-100/40 border border-emerald-100 shrink-0">
                     <p class="text-4xl font-bold text-emerald-600">{{ cn.length }}</p>
                     <p class="text-xs text-slate-600 mt-1">Clientes nuevos en {{ MESES_LARGO[mesSeleccionado() - 1] }}</p>
                   </div>
-                  <ng-container *ngIf="cn.length > 0">
-                    <p class="text-xs text-slate-500 mb-2">Detalle:</p>
-                    <div class="space-y-1.5">
-                      <div *ngFor="let n of cn.slice(0, 8)" class="flex items-center gap-2 border border-slate-100 rounded-md px-3 py-2">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span class="text-sm text-slate-700 truncate">{{ n }}</span>
+                  <ng-container *ngIf="cn.length > 0; else sinNuevos">
+                    <p class="text-xs text-slate-500 mb-2 shrink-0">Detalle:</p>
+                    <!-- flex-1 + min-h-0 en lg: la altura la fija la card izquierda; la lista absoluta no empuja la fila y scrollea por dentro -->
+                    <div class="relative flex-1 min-h-[18rem] lg:min-h-0">
+                      <div class="absolute inset-0 overflow-y-auto space-y-1.5 pr-1">
+                        <div *ngFor="let n of cn" class="flex items-center gap-2 border border-slate-100 rounded-md px-3 py-2">
+                          <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                          <span class="text-sm text-slate-700 truncate">{{ n }}</span>
+                        </div>
                       </div>
-                      <p *ngIf="cn.length > 8" class="text-xs text-slate-400 italic mt-1">y {{ cn.length - 8 }} más...</p>
                     </div>
                   </ng-container>
+                  <ng-template #sinNuevos>
+                    <div class="flex-1 min-h-[18rem] lg:min-h-0 flex items-center justify-center text-sm text-slate-400 italic">
+                      Sin clientes nuevos este mes.
+                    </div>
+                  </ng-template>
                 </ng-container>
               </div>
 
@@ -364,49 +419,42 @@ interface ProductoTop {
                     Cobertura Producto Foco
                   </h3>
                 </div>
-                <div class="mb-3">
-                  <label class="block text-[11px] uppercase text-slate-500 font-medium mb-1">Producto foco del mes</label>
-                  <select
-                    [ngModel]="focoProducto()"
-                    (ngModelChange)="focoProducto.set($event)"
-                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    <option value="">Automático (mayor venta del mes)</option>
-                    <option *ngFor="let p of productosFocoOpciones()" [value]="p">{{ p }}</option>
-                  </select>
-                </div>
-                <ng-container *ngIf="coberturaFoco() as cf">
-                  <div class="bg-emerald-50/60 border border-emerald-100 rounded-lg p-4">
-                    <div class="flex items-start justify-between gap-2 mb-3">
-                      <div class="min-w-0">
-                        <p class="text-xs text-slate-500">Producto</p>
-                        <p class="text-sm font-bold text-slate-900 truncate" [title]="cf.foco">{{ cf.foco || '—' }}</p>
+                <p class="text-[11px] uppercase text-slate-500 font-medium mb-3">Top 3 productos foco del mes</p>
+                <ng-container *ngIf="coberturasFoco() as focos">
+                  <div *ngIf="focos.length === 0" class="text-sm text-slate-400 italic">Sin ventas en el mes.</div>
+                  <div class="space-y-3">
+                    <div *ngFor="let cf of focos; let i = index" class="bg-emerald-50/60 border border-emerald-100 rounded-lg p-4">
+                      <div class="flex items-start justify-between gap-2 mb-3">
+                        <div class="min-w-0">
+                          <p class="text-xs text-slate-500">Producto {{ i + 1 }}</p>
+                          <p class="text-sm font-bold text-slate-900 truncate" [title]="cf.foco">{{ cf.foco || '—' }}</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                          <p class="text-xs text-slate-500">Clientes con producto</p>
+                          <p class="text-2xl font-bold text-emerald-600">{{ cf.clientesConProducto }}</p>
+                        </div>
                       </div>
-                      <div class="text-right shrink-0">
-                        <p class="text-xs text-slate-500">Clientes con producto</p>
-                        <p class="text-2xl font-bold text-emerald-600">{{ cf.clientesConProducto }}</p>
+                      <div class="grid grid-cols-3 gap-2 mb-3">
+                        <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
+                          <p class="text-[10px] text-slate-500">Ventas Brutas</p>
+                          <p class="text-sm font-bold text-slate-900">{{ formatoCLP(cf.ventasBrutas) }}</p>
+                        </div>
+                        <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
+                          <p class="text-[10px] text-slate-500">Margen $</p>
+                          <p class="text-sm font-bold text-emerald-600">{{ formatoCLP(cf.margen) }}</p>
+                        </div>
+                        <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
+                          <p class="text-[10px] text-slate-500">Margen %</p>
+                          <p class="text-sm font-bold text-violet-600">{{ cf.margenPct | number:'1.0-0' }}%</p>
+                        </div>
                       </div>
+                      <div class="flex items-center justify-between mb-1">
+                        <p class="text-sm text-slate-600">Cobertura</p>
+                        <p class="text-sm font-bold text-slate-900">{{ cf.cobertura | number:'1.0-0' }}%</p>
+                      </div>
+                      <app-progress-bar [valor]="cf.cobertura" [alto]="6" color="#10b981"></app-progress-bar>
+                      <p class="text-xs text-slate-500 text-center mt-1">{{ cf.clientesConProducto }} de {{ cf.totalClientes }} clientes</p>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 mb-3">
-                      <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
-                        <p class="text-[10px] text-slate-500">Ventas Brutas</p>
-                        <p class="text-sm font-bold text-slate-900">{{ formatoCLP(cf.ventasBrutas) }}</p>
-                      </div>
-                      <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
-                        <p class="text-[10px] text-slate-500">Margen $</p>
-                        <p class="text-sm font-bold text-emerald-600">{{ formatoCLP(cf.margen) }}</p>
-                      </div>
-                      <div class="bg-white rounded-md p-2 text-center border border-emerald-100/60">
-                        <p class="text-[10px] text-slate-500">Margen %</p>
-                        <p class="text-sm font-bold text-violet-600">{{ cf.margenPct | number:'1.0-0' }}%</p>
-                      </div>
-                    </div>
-                    <div class="flex items-center justify-between mb-1">
-                      <p class="text-sm text-slate-600">Cobertura</p>
-                      <p class="text-sm font-bold text-slate-900">{{ cf.cobertura | number:'1.0-0' }}%</p>
-                    </div>
-                    <app-progress-bar [valor]="cf.cobertura" [alto]="6" color="#10b981"></app-progress-bar>
-                    <p class="text-xs text-slate-500 text-center mt-1">{{ cf.clientesConProducto }} de {{ cf.totalClientes }} clientes</p>
                   </div>
                 </ng-container>
               </div>
@@ -419,13 +467,44 @@ interface ProductoTop {
                   </svg>
                   Cobranza
                 </h3>
-                <div class="rounded-lg border border-dashed border-slate-200 p-6 text-center">
-                  <p class="text-sm text-slate-500">Sin datos de cobranza</p>
-                  <p class="text-xs text-slate-400 mt-1">
-                    Los días de atraso y montos en mora no están en el CSV de ventas.
-                    Sube un archivo de cobranza en Datos para activar esta tarjeta.
-                  </p>
-                </div>
+                <ng-container *ngIf="cobranza() as cb">
+                  <div *ngIf="cb.items.length === 0" class="rounded-lg border border-dashed border-slate-200 p-6 text-center">
+                    <p class="text-sm text-slate-500">Sin datos de cobranza</p>
+                    <p class="text-xs text-slate-400 mt-1">
+                      Los días de atraso y montos en mora no están en el CSV de ventas.
+                      Sube un archivo de cobranza en Datos para activar esta tabla.
+                    </p>
+                  </div>
+                  <div *ngIf="cb.items.length > 0" class="overflow-x-auto">
+                    <table class="w-full">
+                      <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
+                        <tr>
+                          <th class="text-left px-2 py-2 font-semibold">Cliente</th>
+                          <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Días atraso</th>
+                          <th class="text-right px-2 py-2 font-semibold">%</th>
+                          <th class="text-right px-2 py-2 font-semibold whitespace-nowrap">Mora (CLP)</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        <tr *ngFor="let it of cb.items" class="hover:bg-slate-50">
+                          <td class="px-2 py-3 text-sm text-slate-900 truncate max-w-[180px]" [title]="it.cliente">{{ it.cliente }}</td>
+                          <td class="px-2 py-3 text-right text-sm text-slate-700">{{ it.dias }}</td>
+                          <td class="px-2 py-3 text-right text-sm font-medium"
+                              [class.text-rose-600]="it.porcentaje >= 60"
+                              [class.text-amber-600]="it.porcentaje >= 30 && it.porcentaje < 60"
+                              [class.text-slate-600]="it.porcentaje < 30">{{ it.porcentaje | number:'1.0-0' }}%</td>
+                          <td class="px-2 py-3 text-right text-sm font-semibold text-rose-600 whitespace-nowrap">{{ formatoCLP(it.moraClp) }}</td>
+                        </tr>
+                      </tbody>
+                      <tfoot class="border-t border-slate-200">
+                        <tr>
+                          <td class="px-2 py-3 text-sm font-semibold text-slate-900" colspan="3">Total Mora</td>
+                          <td class="px-2 py-3 text-right text-sm font-bold text-rose-600 whitespace-nowrap">{{ formatoCLP(cb.totalMora) }}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </ng-container>
               </div>
             </div>
 
@@ -803,15 +882,38 @@ export class EquipoComponent implements OnInit, OnDestroy {
     };
   });
 
-  cartera = computed<{ total: number; visitados: number; tasaVisita: number } | null>(() => {
+  // Métrica de visitas que generará el vendedor desde la app móvil.
+  // Hasta integrarla queda en null → las cards de visitas muestran "—".
+  visitasApp = signal<number | null>(null);
+  // Nombres de clientes no visitados provistos por la app (pendiente de integración).
+  noVisitadosApp = signal<string[]>([]);
+
+  cartera = computed<{
+    total: number;
+    conVentas: number;
+    visitados: number | null;
+    sinVisitar: number;
+    tasaVisita: number | null;
+    noVisitados: string[];
+  } | null>(() => {
     if (!this.vendedorSeleccionado()) return null;
     const { mes, anio } = this.registrosVendedor();
     const total = new Set<string>();
-    const visitados = new Set<string>();
+    const conVentas = new Set<string>();
     for (const r of anio) if (r.clienteRut) total.add(r.clienteRut.trim());
-    for (const r of mes) if (r.clienteRut) visitados.add(r.clienteRut.trim());
-    const tasaVisita = total.size > 0 ? (visitados.size / total.size) * 100 : 0;
-    return { total: total.size, visitados: visitados.size, tasaVisita };
+    for (const r of mes) if (r.clienteRut) conVentas.add(r.clienteRut.trim());
+
+    const visitados = this.visitasApp();
+    const sinVisitar = visitados == null ? total.size : Math.max(0, total.size - visitados);
+    const tasaVisita = visitados == null || total.size === 0 ? null : (visitados / total.size) * 100;
+    return {
+      total: total.size,
+      conVentas: conVentas.size,
+      visitados,
+      sinVisitar,
+      tasaVisita,
+      noVisitados: this.noVisitadosApp(),
+    };
   });
 
   clientesNuevos = computed<string[]>(() => {
@@ -967,20 +1069,8 @@ export class EquipoComponent implements OnInit, OnDestroy {
     return { meses, metaAnual, vendidoAnual, pctAnual: metaAnual > 0 ? (vendidoAnual / metaAnual) * 100 : 0 };
   });
 
-  // ---------- Cobertura producto foco del mes ----------
-  focoProducto = signal<string>(''); // '' = automático (top por venta del mes)
-
-  productosFocoOpciones = computed<string[]>(() => {
-    const { mes } = this.registrosVendedor();
-    const set = new Set<string>();
-    for (const r of mes) {
-      const p = (r.producto || '').trim();
-      if (p) set.add(p);
-    }
-    return Array.from(set).sort();
-  });
-
-  coberturaFoco = computed<{
+  // ---------- Cobertura: top 3 productos foco del mes ----------
+  coberturasFoco = computed<{
     foco: string;
     ventasBrutas: number;
     margen: number;
@@ -988,48 +1078,55 @@ export class EquipoComponent implements OnInit, OnDestroy {
     clientesConProducto: number;
     totalClientes: number;
     cobertura: number;
-  } | null>(() => {
+  }[]>(() => {
     const v = this.vendedorSeleccionado();
-    if (!v) return null;
+    if (!v) return [];
     const { mes } = this.registrosVendedor();
     const totalClientes = this.cartera()?.total ?? 0;
 
-    let foco = this.focoProducto();
-    if (!foco) {
-      const tot = new Map<string, number>();
-      for (const r of mes) {
-        const p = (r.producto || '').trim();
-        if (p) tot.set(p, (tot.get(p) ?? 0) + r.ventaTotalBruta);
-      }
-      let best = '';
-      let max = 0;
-      tot.forEach((val, k) => {
-        if (val > max) {
-          max = val;
-          best = k;
-        }
-      });
-      foco = best;
-    }
-
-    let ventasBrutas = 0;
-    let margen = 0;
-    const clientes = new Set<string>();
+    // Top 3 productos por venta bruta del mes.
+    const tot = new Map<string, number>();
     for (const r of mes) {
-      if ((r.producto || '').trim() !== foco) continue;
-      ventasBrutas += r.ventaTotalBruta;
-      margen += r.margen;
-      if (r.clienteRut) clientes.add(r.clienteRut.trim());
+      const p = (r.producto || '').trim();
+      if (p) tot.set(p, (tot.get(p) ?? 0) + r.ventaTotalBruta);
     }
-    return {
-      foco,
-      ventasBrutas,
-      margen,
-      margenPct: ventasBrutas > 0 ? (margen / ventasBrutas) * 100 : 0,
-      clientesConProducto: clientes.size,
-      totalClientes,
-      cobertura: totalClientes > 0 ? (clientes.size / totalClientes) * 100 : 0,
-    };
+    const focos = Array.from(tot.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([p]) => p);
+
+    return focos.map((foco) => {
+      let ventasBrutas = 0;
+      let margen = 0;
+      const clientes = new Set<string>();
+      for (const r of mes) {
+        if ((r.producto || '').trim() !== foco) continue;
+        ventasBrutas += r.ventaTotalBruta;
+        margen += r.margen;
+        if (r.clienteRut) clientes.add(r.clienteRut.trim());
+      }
+      return {
+        foco,
+        ventasBrutas,
+        margen,
+        margenPct: ventasBrutas > 0 ? (margen / ventasBrutas) * 100 : 0,
+        clientesConProducto: clientes.size,
+        totalClientes,
+        cobertura: totalClientes > 0 ? (clientes.size / totalClientes) * 100 : 0,
+      };
+    });
+  });
+
+  // ---------- Cobranza ----------
+  // Filas provistas por el archivo/integración de cobranza (pendiente).
+  // El cálculo de "mora" y "%" se ajustará cuando definas la fórmula.
+  cobranzaApp = signal<CobranzaItem[]>([]);
+
+  cobranza = computed<{ items: CobranzaItem[]; totalMora: number }>(() => {
+    if (!this.vendedorSeleccionado()) return { items: [], totalMora: 0 };
+    const items = this.cobranzaApp();
+    const totalMora = items.reduce((acc, it) => acc + it.moraClp, 0);
+    return { items, totalMora };
   });
 
   compactCLP(n: number): string {
