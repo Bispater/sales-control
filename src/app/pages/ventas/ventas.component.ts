@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { RegistroVenta } from '../../models/dataset';
 import { CategoriasService } from '../../services/categorias.service';
 import { DatasetService } from '../../services/dataset.service';
@@ -297,6 +298,7 @@ const CANAL_BADGE: Record<string, string> = {
 export class VentasComponent implements OnInit {
   dataset = inject(DatasetService);
   categoriasService = inject(CategoriasService);
+  private route = inject(ActivatedRoute);
   meses = MESES;
   pageSize = PAGE_SIZE;
   Math = Math;
@@ -328,6 +330,23 @@ export class VentasComponent implements OnInit {
     if (this.categoriasService.totalCargados() === 0) {
       await this.categoriasService.cargar();
     }
+
+    // Si llegamos desde el detalle de un cliente con ?doc=NUMERO, mostramos
+    // esa factura: buscamos por su número y abrimos todos los meses para no
+    // ocultarla por el filtro de mes por defecto.
+    this.route.queryParamMap.subscribe((qp) => {
+      const doc = qp.get('doc');
+      if (doc) {
+        this.texto.set(doc);
+        this.mesFiltro.set(0);
+        this.vendedorFiltro.set('');
+        this.canalFiltro.set('');
+        this.tipoMovFiltro.set('');
+        this.desde.set('');
+        this.hasta.set('');
+        this.pagina.set(0);
+      }
+    });
   }
 
   // ---------- Selector de mes ----------

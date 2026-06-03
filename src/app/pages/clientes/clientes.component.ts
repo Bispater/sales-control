@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { RegistroVenta } from '../../models/dataset';
 import { DatasetService } from '../../services/dataset.service';
@@ -339,21 +340,28 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
             <h4 class="text-sm font-semibold text-slate-900 mb-3">Historial de Ventas</h4>
             <div *ngIf="historial().length === 0" class="text-sm text-slate-400">Sin compras registradas.</div>
             <div class="space-y-2">
-              <div *ngFor="let v of historial()" class="flex items-center justify-between bg-slate-50 rounded-lg p-3">
+              <button *ngFor="let v of historial()" type="button"
+                      (click)="verFactura(v)"
+                      [disabled]="!v.documento"
+                      [title]="v.documento ? 'Ver factura ' + v.documento + ' en Ventas' : ''"
+                      class="w-full text-left flex items-center justify-between bg-slate-50 rounded-lg p-3 transition hover:bg-slate-100 hover:border-brand-300 border border-transparent disabled:cursor-default disabled:hover:bg-slate-50">
                 <div class="flex items-center gap-3 min-w-0">
                   <span class="w-9 h-9 inline-flex items-center justify-center rounded-lg bg-white text-slate-500 shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"/></svg>
                   </span>
                   <div class="min-w-0">
                     <p class="text-sm font-medium text-slate-900 truncate" [title]="v.producto">{{ v.producto }}</p>
-                    <p class="text-xs text-slate-500 truncate">{{ v.vendedor }} · {{ fechaCorta(v.fecha) }}</p>
+                    <p class="text-xs text-slate-500 truncate">
+                      {{ v.vendedor }} · {{ fechaCorta(v.fecha) }}<span *ngIf="v.documento"> · Doc {{ v.documento }}</span>
+                    </p>
                   </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                   <span class="text-sm font-bold text-slate-900">{{ formatoCLP(v.monto) }}</span>
                   <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Completada</span>
+                  <svg *ngIf="v.documento" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
                 </div>
-              </div>
+              </button>
             </div>
           </section>
 
@@ -381,6 +389,7 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
 })
 export class ClientesComponent implements OnDestroy {
   dataset = inject(DatasetService);
+  private router = inject(Router);
   Math = Math;
   pageSize = PAGE_SIZE;
 
@@ -603,6 +612,13 @@ export class ClientesComponent implements OnDestroy {
 
   abrir(c: ResumenCliente) { this.seleccionado.set(c); }
   cerrar() { this.seleccionado.set(null); }
+
+  // Navega a la pestaña Ventas mostrando el detalle de esa factura (documento).
+  verFactura(v: VentaCliente): void {
+    if (!v.documento) return;
+    this.cerrar();
+    this.router.navigate(['/ventas'], { queryParams: { doc: v.documento } });
+  }
 
   badgeClases(e: Estado): string {
     if (e === 'Nuevo') return 'bg-emerald-100 text-emerald-700';
