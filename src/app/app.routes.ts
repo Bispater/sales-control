@@ -40,6 +40,12 @@ export const routes: Routes = [
     title: 'Productos | Control de Ventas',
   },
   {
+    path: 'tareas',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/tareas/tareas.component').then((m) => m.TareasComponent),
+    title: 'Tareas | Control de Ventas',
+  },
+  {
     path: 'datos',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/datos/datos.component').then((m) => m.DatosComponent),

@@ -96,6 +96,27 @@ export class MetasService {
     }
   }
 
+  // Guarda la grilla editada desde la UI: reemplaza todas las metas del año.
+  // Sólo persiste celdas con meta > 0 (el resto se considera "sin meta").
+  async guardarAnio(anio: number, metas: MetaVendedor[]): Promise<void> {
+    const { error: errDel } = await supabase.from(TABLA).delete().eq('anio', anio);
+    if (errDel) throw errDel;
+
+    const validas = metas.filter((m) => m.metaClp > 0);
+    for (let i = 0; i < validas.length; i += BATCH_SIZE) {
+      const lote = validas.slice(i, i + BATCH_SIZE).map((m) => ({
+        vendedor: m.vendedor,
+        anio,
+        mes: m.mes,
+        meta_clp: Math.round(m.metaClp),
+        categoria: m.categoria || null,
+      }));
+      const { error } = await supabase.from(TABLA).insert(lote);
+      if (error) throw error;
+    }
+    await this.cargarAnio(anio);
+  }
+
   private parsearCsv(
     archivo: File,
     anio: number,
