@@ -1147,12 +1147,16 @@ export class EquipoComponent implements OnInit, OnDestroy {
       for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
       return h;
     };
-    const items = [...porCliente.entries()]
-      .filter(([key]) => hash(key) % 5 < 2) // ~40% de la cartera "en mora"
+    const ordenados = [...porCliente.entries()].sort((a, b) => b[1].bruta - a[1].bruta);
+    // ~40% de la cartera "en mora"; si quedan muy pocos, tomamos el top para
+    // que la tabla nunca aparezca vacía cuando el vendedor tiene ventas.
+    let enMora = ordenados.filter(([key]) => hash(key) % 5 < 2);
+    if (enMora.length < 3) enMora = ordenados.slice(0, Math.min(3, ordenados.length));
+    const items = enMora
       .map(([key, c]) => {
         const h = hash(key);
         const dias = 15 + (h % 106); // 15..120 días de atraso
-        const moraClp = Math.round(c.bruta * (0.15 + (h % 40) / 100)); // 15%..54% de su bruta
+        const moraClp = Math.round(Math.abs(c.bruta) * (0.15 + (h % 40) / 100)); // 15%..54% de su bruta
         return { cliente: c.cliente, dias, porcentaje: Math.min(100, Math.round((dias / 120) * 100)), moraClp };
       })
       .filter((it) => it.moraClp > 0)
