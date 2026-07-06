@@ -14,7 +14,10 @@ import { DatasetService } from '../../services/dataset.service';
       <div class="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between gap-6">
         <a routerLink="/dashboard" class="flex items-center gap-2 shrink-0">
           <img src="assets/logo.jpeg" alt="Logo Control de Ventas" class="w-9 h-9 rounded-lg object-contain" />
-          <span class="text-2xl font-extrabold tracking-wide text-[#16a34a]">SENDA</span>
+          <span
+            class="text-2xl tracking-tight bg-gradient-to-r from-[#0f4d2a] to-[#4fa863] bg-clip-text text-transparent"
+            style="font-family: 'Archivo Black', 'Inter', sans-serif;"
+          >SENDA</span>
         </a>
 
         <nav class="flex items-center gap-1 overflow-x-auto">
