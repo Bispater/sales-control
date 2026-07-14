@@ -14,6 +14,7 @@ import { Router } from '@angular/router';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { RegistroVenta } from '../../models/dataset';
 import { DatasetService } from '../../services/dataset.service';
+import { ClientesMaestroService } from '../../services/clientes-maestro.service';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 
 Chart.register(...registerables);
@@ -29,6 +30,10 @@ interface ResumenCliente {
   direccion: string;
   comuna: string;
   ciudad: string;
+  // Datos de la ficha maestra (app móvil), cruzados por RUT.
+  contacto: string;
+  telefono: string;
+  credito: number;
   facturacion: number;
   margen: number;
   margenPct: number;
@@ -40,12 +45,13 @@ interface ResumenCliente {
   estado: Estado;
 }
 
-interface VentaCliente {
-  producto: string;
+interface FacturaCliente {
+  documento: string;
   vendedor: string;
   fecha: Date | null;
   monto: number;
-  documento: string;
+  items: number;       // cantidad de líneas/productos de la factura
+  productos: string;   // resumen legible de los productos ("A, B +2")
 }
 
 interface ProductoCliente {
@@ -271,6 +277,17 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
           <section>
             <h4 class="text-sm font-semibold text-slate-900 mb-3">Información de Contacto</h4>
             <div class="space-y-2 text-sm">
+              <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
+                <span class="text-slate-500">Persona de contacto:</span>
+                <span class="text-slate-700">{{ s.contacto || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/></svg>
+                <span class="text-slate-500">Teléfono:</span>
+                <a *ngIf="s.telefono; else sinTel" [href]="'tel:' + s.telefono" class="text-sky-600 hover:underline">{{ s.telefono }}</a>
+                <ng-template #sinTel><span class="text-slate-700">—</span></ng-template>
+              </div>
               <div class="flex items-center gap-2" *ngIf="s.email">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"/></svg>
                 <a [href]="'mailto:' + s.email" class="text-sky-600 hover:underline truncate">{{ s.email }}</a>
@@ -281,7 +298,12 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
               </div>
               <div class="flex items-start gap-2" *ngIf="s.direccion || s.comuna || s.ciudad">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
-                <span class="text-slate-700">{{ direccionCompleta(s) }}</span>
+                <a [href]="mapaUrl(s)" target="_blank" rel="noopener"
+                   class="text-sky-600 hover:underline inline-flex items-center gap-1 group"
+                   title="Ver dirección en Google Maps">
+                  <span>{{ direccionCompleta(s) }}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-sky-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                </a>
               </div>
             </div>
           </section>
@@ -312,6 +334,10 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
                 <p class="text-slate-800 mt-0.5">{{ s.vendedorPrincipal || '—' }}</p>
               </div>
               <div>
+                <p class="text-xs text-slate-500">Crédito Asignado</p>
+                <p class="text-slate-800 mt-0.5 font-semibold">{{ s.credito > 0 ? formatoCLP(s.credito) : '—' }}</p>
+              </div>
+              <div>
                 <p class="text-xs text-slate-500">Fecha de Registro</p>
                 <p class="text-slate-800 mt-0.5 flex items-center gap-1">
                   <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
@@ -335,10 +361,10 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
             <div class="h-60" [class.hidden]="historialGrafico().total === 0"><canvas #histCanvas></canvas></div>
           </section>
 
-          <!-- Historial de Ventas (lista) — ahora prioritario, sobre el Top 10 -->
+          <!-- Últimas Facturas (lista) — ahora prioritario, sobre el Top 10 -->
           <section>
-            <h4 class="text-sm font-semibold text-slate-900 mb-3">Historial de Ventas</h4>
-            <div *ngIf="historial().length === 0" class="text-sm text-slate-400">Sin compras registradas.</div>
+            <h4 class="text-sm font-semibold text-slate-900 mb-3">Últimas Facturas</h4>
+            <div *ngIf="historial().length === 0" class="text-sm text-slate-400">Sin facturas registradas.</div>
             <div class="space-y-2">
               <button *ngFor="let v of historial()" type="button"
                       (click)="verFactura(v)"
@@ -347,12 +373,15 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
                       class="w-full text-left flex items-center justify-between bg-slate-50 rounded-lg p-3 transition hover:bg-slate-100 hover:border-brand-300 border border-transparent disabled:cursor-default disabled:hover:bg-slate-50">
                 <div class="flex items-center gap-3 min-w-0">
                   <span class="w-9 h-9 inline-flex items-center justify-center rounded-lg bg-white text-slate-500 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
                   </span>
                   <div class="min-w-0">
-                    <p class="text-sm font-medium text-slate-900 truncate" [title]="v.producto">{{ v.producto }}</p>
-                    <p class="text-xs text-slate-500 truncate">
-                      {{ v.vendedor }} · {{ fechaCorta(v.fecha) }}<span *ngIf="v.documento"> · Doc {{ v.documento }}</span>
+                    <p class="text-sm font-medium text-slate-900 truncate">
+                      <span *ngIf="v.documento; else sinDoc">Factura {{ v.documento }}</span>
+                      <ng-template #sinDoc>Venta sin documento</ng-template>
+                    </p>
+                    <p class="text-xs text-slate-500 truncate" [title]="v.productos">
+                      {{ fechaCorta(v.fecha) }} · {{ v.items }} {{ v.items === 1 ? 'producto' : 'productos' }}<span *ngIf="v.vendedor"> · {{ v.vendedor }}</span>
                     </p>
                   </div>
                 </div>
@@ -389,6 +418,7 @@ const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
 })
 export class ClientesComponent implements OnDestroy {
   dataset = inject(DatasetService);
+  clientesMaestro = inject(ClientesMaestroService);
   private router = inject(Router);
   Math = Math;
   pageSize = PAGE_SIZE;
@@ -411,6 +441,8 @@ export class ClientesComponent implements OnDestroy {
 
   constructor() {
     setTimeout(() => this.listoParaCalcular.set(true), 0);
+    // Ficha maestra (contacto/teléfono/crédito) creada desde la app móvil.
+    this.clientesMaestro.cargar();
 
     effect(() => {
       const canvas = this.histCanvas();
@@ -444,6 +476,9 @@ export class ClientesComponent implements OnDestroy {
           direccion: r.clienteDireccion?.trim() || '',
           comuna: r.clienteComuna?.trim() || '',
           ciudad: r.clienteCiudad?.trim() || '',
+          contacto: '',
+          telefono: '',
+          credito: 0,
           facturacion: 0,
           margen: 0,
           margenPct: 0,
@@ -481,6 +516,8 @@ export class ClientesComponent implements OnDestroy {
       set.add(r.numeroDocumento + '|' + r.sucursal);
     }
 
+    // Ficha maestra desde la app (contacto/teléfono/crédito), cruzada por RUT.
+    const maestro = this.clientesMaestro.mapaPorRut();
     const arr = Array.from(map.entries()).map(([id, c]) => {
       c.margenPct = c.facturacion > 0 ? (c.margen / c.facturacion) * 100 : 0;
       c.cantidadDocs = docsPorCliente.get(id)?.size ?? 0;
@@ -491,6 +528,13 @@ export class ClientesComponent implements OnDestroy {
         if (v > max) { max = v; topVendedor = k; }
       });
       c.vendedorPrincipal = topVendedor;
+      const fichaMaestra = c._rutNorm ? maestro.get(c._rutNorm) : undefined;
+      if (fichaMaestra) {
+        c.contacto = fichaMaestra.contacto || '';
+        c.telefono = fichaMaestra.telefono || '';
+        c.credito = fichaMaestra.credito || 0;
+        if (!c.direccion) c.direccion = fichaMaestra.direccion || '';
+      }
       const bloqueado = !!c._rutNorm && impagas.has(c._rutNorm);
       c.estado = this.calcularEstado(c.primerCompra, c.ultimaCompra, hoy, bloqueado);
       delete (c as { _vendedores?: Map<string, number> })._vendedores;
@@ -547,24 +591,47 @@ export class ClientesComponent implements OnDestroy {
     return { total: lista.length, activos, nuevos, inactivos, bloqueados, facturacion };
   });
 
-  historial = computed<VentaCliente[]>(() => {
+  // Historial agrupado por FACTURA (documento), no por línea de producto.
+  historial = computed<FacturaCliente[]>(() => {
     const c = this.seleccionado();
     if (!c) return [];
-    const items: VentaCliente[] = [];
+    const clienteId = (c.rut || c.nombre).toUpperCase();
+    const map = new Map<string, {
+      documento: string; vendedor: string; fecha: Date | null;
+      monto: number; items: number; productos: string[];
+    }>();
     for (const r of this.dataset.registros()) {
       const id = (r.clienteRut?.trim() || r.nombreCliente?.trim() || '').toUpperCase();
-      const clienteId = (c.rut || c.nombre).toUpperCase();
       if (id !== clienteId) continue;
-      items.push({
-        producto: (r.producto || '').trim() || 'Sin producto',
-        vendedor: (r.vendedor || '').trim(),
-        fecha: this.parsearFecha(r),
-        monto: r.ventaTotalBruta,
-        documento: r.numeroDocumento,
-      });
+      // Agrupa por documento+sucursal (misma clave que usa el conteo de ventas).
+      const doc = (r.numeroDocumento || '').trim();
+      const clave = doc ? doc + '|' + r.sucursal : 'SIN-DOC|' + this.parsearFecha(r)?.getTime();
+      let f = map.get(clave);
+      if (!f) {
+        f = { documento: doc, vendedor: (r.vendedor || '').trim(), fecha: null, monto: 0, items: 0, productos: [] };
+        map.set(clave, f);
+      }
+      f.monto += r.ventaTotalBruta;
+      f.items += 1;
+      const fecha = this.parsearFecha(r);
+      if (fecha && (!f.fecha || fecha > f.fecha)) f.fecha = fecha;
+      const p = (r.producto || '').trim();
+      if (p && !f.productos.includes(p)) f.productos.push(p);
     }
-    items.sort((a, b) => (b.fecha?.getTime() ?? 0) - (a.fecha?.getTime() ?? 0));
-    return items.slice(0, 20);
+    const facturas: FacturaCliente[] = Array.from(map.values()).map((f) => {
+      const primeros = f.productos.slice(0, 2).join(', ');
+      const extra = f.productos.length > 2 ? ` +${f.productos.length - 2}` : '';
+      return {
+        documento: f.documento,
+        vendedor: f.vendedor,
+        fecha: f.fecha,
+        monto: f.monto,
+        items: f.items,
+        productos: primeros ? primeros + extra : 'Sin detalle',
+      };
+    });
+    facturas.sort((a, b) => (b.fecha?.getTime() ?? 0) - (a.fecha?.getTime() ?? 0));
+    return facturas.slice(0, 20);
   });
 
   // Serie mensual: 12 meses terminando en el mes de referencia (mes actual).
@@ -614,7 +681,7 @@ export class ClientesComponent implements OnDestroy {
   cerrar() { this.seleccionado.set(null); }
 
   // Navega a la pestaña Ventas mostrando el detalle de esa factura (documento).
-  verFactura(v: VentaCliente): void {
+  verFactura(v: FacturaCliente): void {
     if (!v.documento) return;
     this.cerrar();
     this.router.navigate(['/ventas'], { queryParams: { doc: v.documento } });
@@ -635,6 +702,12 @@ export class ClientesComponent implements OnDestroy {
 
   direccionCompleta(c: ResumenCliente): string {
     return this.direccionResumen(c) || '—';
+  }
+
+  // Enlace a Google Maps con la dirección del cliente (búsqueda por texto).
+  mapaUrl(c: ResumenCliente): string {
+    const q = this.direccionResumen(c);
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
   }
 
   formatoCLP(n: number): string {

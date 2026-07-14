@@ -124,6 +124,10 @@ interface FormTarea {
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
                 {{ t.vendedor }}
               </span>
+              <span class="inline-flex items-center gap-1" *ngIf="t.cliente">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.999 2.999 0 0 0 4.5 0 3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z"/></svg>
+                {{ t.cliente }}
+              </span>
               <span class="inline-flex items-center gap-1" *ngIf="t.fechaVencimiento">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
                 Vence: {{ fechaCorta(t.fechaVencimiento) }}
@@ -188,6 +192,20 @@ interface FormTarea {
                      class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white" />
             </div>
           </div>
+          <!-- Cliente con buscador por nombre -->
+          <div class="relative">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
+            <input [ngModel]="clienteQuery()" (ngModelChange)="clienteQuery.set($event); clienteAbierto.set(true)"
+                   (focus)="clienteAbierto.set(true)" (blur)="cerrarPanelCliente()"
+                   placeholder="Buscar cliente por nombre..."
+                   class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white" />
+            <div *ngIf="clienteAbierto() && sugerenciasCliente().length"
+                 class="absolute z-10 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+              <button *ngFor="let c of sugerenciasCliente()" type="button"
+                      (mousedown)="$event.preventDefault(); elegirCliente(c)"
+                      class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 truncate">{{ c }}</button>
+            </div>
+          </div>
           <p *ngIf="errorForm()" class="text-sm text-rose-600">{{ errorForm() }}</p>
         </div>
 
@@ -216,6 +234,10 @@ export class TareasComponent implements OnInit {
   errorForm = signal('');
   form: FormTarea = this.formVacio();
 
+  // Buscador de cliente del formulario de tarea.
+  clienteQuery = signal('');
+  clienteAbierto = signal(false);
+
   async ngOnInit() {
     if (this.dataset.registros().length === 0) {
       const anio = this.dataset.anioActivo() ?? this.dataset.aniosDisponibles()[0]?.anio;
@@ -233,6 +255,22 @@ export class TareasComponent implements OnInit {
       if (t.vendedor) set.add(t.vendedor);
     }
     return Array.from(set).sort();
+  });
+
+  // Nombres de clientes (desde ventas) para el buscador del formulario.
+  clientesOpciones = computed<string[]>(() => {
+    const set = new Set<string>();
+    for (const r of this.dataset.registros()) {
+      const n = (r.nombreCliente || '').trim();
+      if (n) set.add(n);
+    }
+    return Array.from(set).sort();
+  });
+
+  sugerenciasCliente = computed<string[]>(() => {
+    const q = this.clienteQuery().toLowerCase().trim();
+    if (!q) return this.clientesOpciones().slice(0, 20);
+    return this.clientesOpciones().filter((c) => c.toLowerCase().includes(q)).slice(0, 20);
   });
 
   kpis = computed(() => {
@@ -264,10 +302,21 @@ export class TareasComponent implements OnInit {
 
   abrirNueva(): void {
     this.form = this.formVacio();
+    this.clienteQuery.set('');
+    this.clienteAbierto.set(false);
     this.errorForm.set('');
     this.modalAbierto.set(true);
   }
   cerrarModal(): void { this.modalAbierto.set(false); }
+
+  elegirCliente(nombre: string): void {
+    this.clienteQuery.set(nombre);
+    this.clienteAbierto.set(false);
+  }
+  cerrarPanelCliente(): void {
+    // Delay para que un clic en la sugerencia se registre antes de cerrar.
+    setTimeout(() => this.clienteAbierto.set(false), 150);
+  }
 
   crearTarea(): void {
     const f = this.form;
@@ -280,6 +329,7 @@ export class TareasComponent implements OnInit {
       tipo: f.tipo,
       prioridad: f.prioridad,
       vendedor: f.vendedor,
+      cliente: this.clienteQuery().trim(),
       fechaVencimiento: f.fechaVencimiento,
       estado: 'Pendiente',
     });

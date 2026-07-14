@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import Papa from 'papaparse';
+import { supabase } from '../supabase.config';
 
 export type TareaTipo = 'Producto Foco' | 'Ruta' | 'Venta Específica' | 'Otro';
 export type TareaPrioridad = 'Alta' | 'Media' | 'Baja';
@@ -12,38 +13,70 @@ export interface Tarea {
   tipo: TareaTipo;
   prioridad: TareaPrioridad;
   vendedor: string;
+  cliente?: string;
   fechaVencimiento: string; // YYYY-MM-DD
   estado: TareaEstado;
   fechaCompletada?: string; // YYYY-MM-DD
 }
 
-const STORAGE = 'control-ventas:tareas:v1';
+const TABLA = 'tareas';
 const TIPOS: TareaTipo[] = ['Producto Foco', 'Ruta', 'Venta Específica', 'Otro'];
 
-// Las tareas no tienen aún tabla en Supabase; se persisten en el navegador.
+// Tareas compartidas con la app móvil vía la tabla `tareas` de Supabase.
 @Injectable({ providedIn: 'root' })
 export class TareasService {
   tareas = signal<Tarea[]>([]);
+  cargando = signal(false);
 
   constructor() {
     this.cargar();
   }
 
-  private cargar(): void {
+  async cargar(): Promise<void> {
+    this.cargando.set(true);
     try {
-      const raw = localStorage.getItem(STORAGE);
-      if (raw) this.tareas.set(JSON.parse(raw));
-    } catch {
-      // ignore
+      const { data, error } = await supabase
+        .from(TABLA)
+        .select('id, titulo, descripcion, tipo, prioridad, vendedor, cliente, fecha_vencimiento, estado, fecha_completada')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      this.tareas.set((data ?? []).map((r) => this.desdeFila(r as Record<string, unknown>)));
+    } catch (e) {
+      // Silencioso: si la tabla no existe aún, se queda vacío.
+      console.warn('cargar tareas:', e);
+    } finally {
+      this.cargando.set(false);
     }
   }
 
-  private persistir(): void {
-    try {
-      localStorage.setItem(STORAGE, JSON.stringify(this.tareas()));
-    } catch {
-      // ignore
-    }
+  private desdeFila(r: Record<string, unknown>): Tarea {
+    return {
+      id: String(r['id'] ?? ''),
+      titulo: String(r['titulo'] ?? ''),
+      descripcion: String(r['descripcion'] ?? ''),
+      tipo: (r['tipo'] as TareaTipo) ?? 'Otro',
+      prioridad: (r['prioridad'] as TareaPrioridad) ?? 'Media',
+      vendedor: String(r['vendedor'] ?? ''),
+      cliente: r['cliente'] ? String(r['cliente']) : '',
+      fechaVencimiento: String(r['fecha_vencimiento'] ?? ''),
+      estado: (r['estado'] as TareaEstado) ?? 'Pendiente',
+      fechaCompletada: r['fecha_completada'] ? String(r['fecha_completada']) : undefined,
+    };
+  }
+
+  private aFila(t: Tarea): Record<string, unknown> {
+    return {
+      id: t.id,
+      titulo: t.titulo,
+      descripcion: t.descripcion,
+      tipo: t.tipo,
+      prioridad: t.prioridad,
+      vendedor: t.vendedor,
+      cliente: t.cliente || null,
+      fecha_vencimiento: t.fechaVencimiento || null,
+      estado: t.estado,
+      fecha_completada: t.fechaCompletada || null,
+    };
   }
 
   private nuevoId(): string {
@@ -55,19 +88,26 @@ export class TareasService {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  agregar(t: Omit<Tarea, 'id'>): void {
-    this.tareas.set([{ ...t, id: this.nuevoId() }, ...this.tareas()]);
-    this.persistir();
+  async agregar(t: Omit<Tarea, 'id'>): Promise<void> {
+    const tarea: Tarea = { ...t, id: this.nuevoId() };
+    this.tareas.set([tarea, ...this.tareas()]); // optimista
+    const { error } = await supabase.from(TABLA).insert(this.aFila(tarea));
+    if (error) console.warn('agregar tarea:', error);
   }
 
-  actualizar(id: string, patch: Partial<Tarea>): void {
-    this.tareas.set(this.tareas().map((t) => (t.id === id ? { ...t, ...patch } : t)));
-    this.persistir();
+  async actualizar(id: string, patch: Partial<Tarea>): Promise<void> {
+    const actual = this.tareas().find((t) => t.id === id);
+    if (!actual) return;
+    const nueva = { ...actual, ...patch };
+    this.tareas.set(this.tareas().map((t) => (t.id === id ? nueva : t)));
+    const { error } = await supabase.from(TABLA).update(this.aFila(nueva)).eq('id', id);
+    if (error) console.warn('actualizar tarea:', error);
   }
 
-  eliminar(id: string): void {
+  async eliminar(id: string): Promise<void> {
     this.tareas.set(this.tareas().filter((t) => t.id !== id));
-    this.persistir();
+    const { error } = await supabase.from(TABLA).delete().eq('id', id);
+    if (error) console.warn('eliminar tarea:', error);
   }
 
   // Click en el círculo: Pendiente → En Progreso → Completada → Pendiente.
@@ -89,7 +129,7 @@ export class TareasService {
         header: true,
         skipEmptyLines: true,
         worker: false,
-        complete: (res) => {
+        complete: async (res) => {
           const col = this.detectarColumnas(res.meta.fields ?? []);
           if (!col.titulo) {
             reject(new Error('El archivo debe tener una columna "Título".'));
@@ -106,13 +146,21 @@ export class TareasService {
               tipo: this.normTipo(col.tipo ? row[col.tipo] : ''),
               prioridad: this.normPrioridad(col.prioridad ? row[col.prioridad] : ''),
               vendedor: col.vendedor ? (row[col.vendedor] ?? '').toString().trim() : '',
+              cliente: col.cliente ? (row[col.cliente] ?? '').toString().trim() : '',
               fechaVencimiento: this.normFecha(col.fecha ? row[col.fecha] : ''),
               estado: 'Pendiente',
             });
           }
-          this.tareas.set([...nuevas, ...this.tareas()]);
-          this.persistir();
-          resolve(nuevas.length);
+          try {
+            if (nuevas.length > 0) {
+              const { error } = await supabase.from(TABLA).insert(nuevas.map((t) => this.aFila(t)));
+              if (error) throw error;
+            }
+            this.tareas.set([...nuevas, ...this.tareas()]);
+            resolve(nuevas.length);
+          } catch (e) {
+            reject(e as Error);
+          }
         },
         error: (e) => reject(e),
       });
@@ -121,7 +169,7 @@ export class TareasService {
 
   private detectarColumnas(fields: string[]): {
     titulo?: string; descripcion?: string; tipo?: string;
-    prioridad?: string; vendedor?: string; fecha?: string;
+    prioridad?: string; vendedor?: string; cliente?: string; fecha?: string;
   } {
     const out: Record<string, string | undefined> = {};
     for (const f of fields) {
@@ -131,6 +179,7 @@ export class TareasService {
       else if (!out['tipo'] && /tipo/.test(n)) out['tipo'] = f;
       else if (!out['prioridad'] && /priorid/.test(n)) out['prioridad'] = f;
       else if (!out['vendedor'] && /(vendedor|asignar|ejecutivo|responsable)/.test(n)) out['vendedor'] = f;
+      else if (!out['cliente'] && /(cliente|raz[oó]n)/.test(n)) out['cliente'] = f;
       else if (!out['fecha'] && /(fecha|vencim|vence)/.test(n)) out['fecha'] = f;
     }
     return out as ReturnType<TareasService['detectarColumnas']>;

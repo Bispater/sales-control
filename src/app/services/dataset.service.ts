@@ -138,6 +138,13 @@ export class DatasetService {
     onProgress({ fase: 'parseando', pct: 0, mensaje: 'Leyendo archivo...' });
     const filas = await this.parsearCsv(archivo, anio, onProgress);
 
+    // Seguridad: nunca borrar el año si el archivo no trajo filas válidas.
+    if (filas.length === 0) {
+      throw new Error(
+        'El archivo no contiene filas válidas. No se modificó ningún dato del año ' + anio + '.',
+      );
+    }
+
     onProgress({
       fase: 'comprimiendo',
       pct: 0,

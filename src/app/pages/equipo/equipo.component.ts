@@ -16,6 +16,7 @@ import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { CategoriasService } from '../../services/categorias.service';
 import { DatasetService } from '../../services/dataset.service';
 import { MetasService } from '../../services/metas.service';
+import { GruposDiasService } from '../../services/grupos-dias.service';
 import { RegistroVenta } from '../../models/dataset';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { BadgeComponent } from '../../shared/badge/badge.component';
@@ -210,13 +211,6 @@ interface ProductoTop {
               <h3 class="text-base font-semibold text-slate-900 mb-4">Métricas de Desempeño</h3>
               <ng-container *ngIf="metricas() as m">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div class="border border-slate-100 rounded-lg px-3 py-3 flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-2 text-slate-600 text-sm">
-                      <span class="w-7 h-7 inline-flex items-center justify-center rounded-md bg-emerald-50 text-emerald-600 font-bold">$</span>
-                      Ventas Brutas
-                    </div>
-                    <span class="text-sm font-bold text-slate-900">{{ formatoCLP(m.ventasBrutas) }}</span>
-                  </div>
                   <div class="border border-slate-100 rounded-lg px-3 py-3 flex items-center justify-between gap-3">
                     <div class="flex items-center gap-2 text-slate-600 text-sm">
                       <span class="w-7 h-7 inline-flex items-center justify-center rounded-md bg-emerald-50 text-emerald-600 font-bold">$</span>
@@ -633,6 +627,7 @@ export class EquipoComponent implements OnInit, OnDestroy {
   dataset = inject(DatasetService);
   metasService = inject(MetasService);
   categoriasService = inject(CategoriasService);
+  gruposDiasService = inject(GruposDiasService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -652,6 +647,14 @@ export class EquipoComponent implements OnInit, OnDestroy {
       const anio = this.dataset.anioActivo();
       if (anio != null && this.metasService.anioCargado() !== anio) {
         this.metasService.cargarAnio(anio);
+      }
+    });
+
+    // Días laborales del año activo, para proyectar con días hábiles.
+    effect(() => {
+      const anio = this.dataset.anioActivo();
+      if (anio != null && this.gruposDiasService.anioCargado() !== anio) {
+        this.gruposDiasService.cargarAnio(anio);
       }
     });
 
@@ -733,6 +736,38 @@ export class EquipoComponent implements OnInit, OnDestroy {
     return this.dataset.registros().filter((r) => r.mes === mes);
   });
 
+  // Cuenta días de semana (L-V) entre el día 1 y `hasta` (inclusive) del mes.
+  private contarDiasSemana(anio: number, mes: number, hasta: number): number {
+    let n = 0;
+    for (let d = 1; d <= hasta; d++) {
+      const dow = new Date(anio, mes - 1, d).getDay();
+      if (dow !== 0 && dow !== 6) n++;
+    }
+    return n;
+  }
+
+  // Días laborales totales del mes: los configurados en DATOS o, si no hay,
+  // los días de semana (L-V) del mes como aproximación.
+  private diasLaboralesTotales = computed(() => {
+    const anio = this.dataset.anioActivo() ?? new Date().getFullYear();
+    const mes = this.mesSeleccionado();
+    const configurado = this.gruposDiasService.diasDelMes(mes);
+    if (configurado > 0) return configurado;
+    const diasMes = new Date(anio, mes, 0).getDate();
+    return this.contarDiasSemana(anio, mes, diasMes);
+  });
+
+  // Días laborales transcurridos hasta el día de corte (día de semana elapsed).
+  private diasLaboralesTranscurridos = computed(() => {
+    const anio = this.dataset.anioActivo() ?? new Date().getFullYear();
+    const mes = this.mesSeleccionado();
+    const corte = this.diaCorte();
+    if (corte <= 0) return 0;
+    const habiles = this.contarDiasSemana(anio, mes, corte);
+    // No exceder el total configurado.
+    return Math.min(habiles, this.diasLaboralesTotales());
+  });
+
   private factorProyeccion = computed(() => {
     const anio = this.dataset.anioActivo();
     const mes = this.mesSeleccionado();
@@ -740,10 +775,13 @@ export class EquipoComponent implements OnInit, OnDestroy {
     if (anio == null) return 1;
     if (anio < hoy.getFullYear() || (anio === hoy.getFullYear() && mes < hoy.getMonth() + 1)) return 1;
     if (anio > hoy.getFullYear() || (anio === hoy.getFullYear() && mes > hoy.getMonth() + 1)) return 0;
-    const diasMes = new Date(anio, mes, 0).getDate();
-    return diasMes / Math.max(1, hoy.getDate());
+    // Proyección por días laborales: total / transcurridos.
+    const total = this.diasLaboralesTotales();
+    const transcurridos = this.diasLaboralesTranscurridos();
+    return transcurridos > 0 ? total / transcurridos : 0;
   });
 
+  // Días del mes calendario (para el día de corte del período).
   private diasMes = computed(() => {
     const anio = this.dataset.anioActivo() ?? new Date().getFullYear();
     const mes = this.mesSeleccionado();
@@ -851,9 +889,8 @@ export class EquipoComponent implements OnInit, OnDestroy {
     const cumplimientoProy = meta > 0 ? (ventasBrutasProy / meta) * 100 : 0;
     const diferenciaMeta = meta > 0 ? ventasBrutas - meta : 0;
 
-    const diaCorte = this.diaCorte();
-    const dias = this.diasMes();
-    const diasRestantes = Math.max(0, dias - diaCorte);
+    // Venta diaria necesaria = por día laboral restante (no día calendario).
+    const diasRestantes = Math.max(0, this.diasLaboralesTotales() - this.diasLaboralesTranscurridos());
     const metaCumplida = meta > 0 && ventasBrutas >= meta;
     const ventaDiariaNec = !metaCumplida && meta > 0 && diasRestantes > 0
       ? (meta - ventasBrutas) / diasRestantes
@@ -865,7 +902,7 @@ export class EquipoComponent implements OnInit, OnDestroy {
     let vsMesAntPeriodo = 0;
     if (mesAnt >= 1 && anioAct != null) {
       const diasMesAnt = new Date(anioAct, mesAnt, 0).getDate();
-      const corte = Math.min(diaCorte || diasMesAnt, diasMesAnt);
+      const corte = Math.min(this.diaCorte() || diasMesAnt, diasMesAnt);
       const norm = (s: string) => s.trim().toUpperCase();
       const target = norm(v.nombre);
       for (const r of this.dataset.registros()) {

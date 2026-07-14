@@ -6,9 +6,10 @@ import { CategoriasService } from '../../services/categorias.service';
 import { DatasetService } from '../../services/dataset.service';
 import { MetasService } from '../../services/metas.service';
 import { TareasService } from '../../services/tareas.service';
+import { GRUPOS, GruposDiasService } from '../../services/grupos-dias.service';
 import { colorPorNombre, iniciales } from '../../utils/colores';
 
-type Tab = 'importar' | 'metas' | 'foco';
+type Tab = 'importar' | 'metas' | 'grupos' | 'foco';
 type TipoImport = 'ventas' | 'tareas' | 'clientes';
 
 interface EstadoSubida {
@@ -52,6 +53,13 @@ const FOCO_STORAGE = 'control-ventas:productos-foco:v1';
         [class.text-slate-900]="tab() === 'metas'" [class.text-slate-500]="tab() !== 'metas'">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
         Metas Mensuales
+      </button>
+      <button (click)="tab.set('grupos')"
+        class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition"
+        [class.bg-white]="tab() === 'grupos'" [class.shadow-sm]="tab() === 'grupos'"
+        [class.text-slate-900]="tab() === 'grupos'" [class.text-slate-500]="tab() !== 'grupos'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
+        Metas por Grupo
       </button>
       <button (click)="tab.set('foco')"
         class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition"
@@ -228,6 +236,82 @@ const FOCO_STORAGE = 'control-ventas:productos-foco:v1';
     </div>
 
     <!-- ============================================================= -->
+    <!-- ============ TAB: METAS POR GRUPO + DÍAS LABORALES ========== -->
+    <!-- ============================================================= -->
+    <div *ngIf="tab() === 'grupos'" class="space-y-6">
+      <!-- Metas por grupo -->
+      <div class="bg-white rounded-xl shadow-card border border-slate-100 p-6">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <h2 class="text-base font-semibold text-slate-900">Metas por Grupo</h2>
+          <select [ngModel]="anioGrupos()" (ngModelChange)="cambiarAnioGrupos(+$event)"
+                  class="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option *ngFor="let a of aniosOpciones" [value]="a">{{ a }}</option>
+          </select>
+        </div>
+        <p class="text-sm text-slate-500 mb-4">Meta mensual por grupo de clientes (según la categoría cargada en “Importar Clientes”). Se usa para la proyección y el cumplimiento proyectado.</p>
+
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-slate-200">
+                <th class="text-left px-3 py-3 text-xs font-semibold text-slate-600 sticky left-0 bg-white min-w-[130px]">Grupo</th>
+                <th *ngFor="let m of mesesLargo" class="text-center px-2 py-3 text-xs font-semibold text-slate-600 min-w-[90px]">{{ m }}</th>
+                <th class="text-center px-3 py-3 text-xs font-semibold text-slate-600 bg-sky-50 min-w-[90px]">Total Año</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let g of grupos" class="border-b border-slate-100">
+                <td class="px-3 py-3 sticky left-0 bg-white text-sm font-medium text-slate-800">{{ g }}</td>
+                <td *ngFor="let m of mesesLargo; let i = index" class="px-1.5 py-2">
+                  <input type="number" min="0" [ngModel]="valorMetaGrupo(g, i)" (ngModelChange)="setMetaGrupo(g, i, $event)"
+                         class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white" />
+                </td>
+                <td class="px-3 py-2 text-right text-sm font-bold text-slate-900 bg-sky-50/60 whitespace-nowrap">{{ formatoCLP(totalAnioGrupo(g)) }}</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="border-t-2 border-slate-200">
+                <td class="px-3 py-3 text-sm font-semibold text-slate-700 sticky left-0 bg-white">Total por Mes</td>
+                <td *ngFor="let m of mesesLargo; let i = index" class="px-2 py-3 text-center text-sm font-semibold text-slate-700 whitespace-nowrap">{{ formatoCLP(totalMesGrupo(i)) }}</td>
+                <td class="px-3 py-3 text-right text-sm font-bold text-slate-900 bg-sky-50 whitespace-nowrap">{{ formatoCLP(totalGeneralGrupo()) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 mt-5">
+          <span *ngIf="gruposGuardado()" class="text-xs text-emerald-600">{{ gruposGuardado() }}</span>
+          <button (click)="guardarMetasGrupo()" [disabled]="guardandoGrupos()"
+                  class="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5 7.5 3h9.75A2.25 2.25 0 0 1 19.5 5.25v13.5A2.25 2.25 0 0 1 17.25 21H6.75A2.25 2.25 0 0 1 4.5 18.75V9M3 7.5V18.75A2.25 2.25 0 0 0 5.25 21M3 7.5h2.25M15 3.75v3a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 9 6.75v-3"/></svg>
+            {{ guardandoGrupos() ? 'Guardando...' : 'Guardar Metas por Grupo' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Días laborales -->
+      <div class="bg-white rounded-xl shadow-card border border-slate-100 p-6">
+        <h2 class="text-base font-semibold text-slate-900 mb-2">Días Laborales por Mes · {{ anioGrupos() }}</h2>
+        <p class="text-sm text-slate-500 mb-4">Días hábiles de cada mes. Se usan para proyectar la venta y el cumplimiento proyectado (en vez de días calendario).</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div *ngFor="let m of mesesLargo; let i = index" class="border border-slate-100 rounded-lg p-3">
+            <label class="block text-xs font-medium text-slate-600 mb-1">{{ m }}</label>
+            <input type="number" min="0" max="31" [ngModel]="valorDias(i)" (ngModelChange)="setDias(i, $event)"
+                   class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white" />
+          </div>
+        </div>
+        <div class="flex items-center justify-end gap-2 mt-5">
+          <span *ngIf="diasGuardado()" class="text-xs text-emerald-600">{{ diasGuardado() }}</span>
+          <button (click)="guardarDias()" [disabled]="guardandoDias()"
+                  class="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5 7.5 3h9.75A2.25 2.25 0 0 1 19.5 5.25v13.5A2.25 2.25 0 0 1 17.25 21H6.75A2.25 2.25 0 0 1 4.5 18.75V9M3 7.5V18.75A2.25 2.25 0 0 0 5.25 21M3 7.5h2.25M15 3.75v3a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 9 6.75v-3"/></svg>
+            {{ guardandoDias() ? 'Guardando...' : 'Guardar Días Laborales' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================= -->
     <!-- ==================== TAB: PRODUCTOS FOCO ==================== -->
     <!-- ============================================================= -->
     <div *ngIf="tab() === 'foco'" class="bg-white rounded-xl shadow-card border border-slate-100 p-6">
@@ -358,8 +442,10 @@ export class DatosComponent implements OnInit {
   categoriasService = inject(CategoriasService);
   metasService = inject(MetasService);
   tareasService = inject(TareasService);
+  gruposDiasService = inject(GruposDiasService);
 
   tab = signal<Tab>('importar');
+  grupos = GRUPOS;
 
   mesesLargo = MESES_LARGO;
   anioActual = new Date().getFullYear();
@@ -429,7 +515,9 @@ export class DatosComponent implements OnInit {
       this.datasetService.listarAnios(),
       this.categoriasService.cargar(),
       this.metasService.cargarAnio(this.anioMetas()),
+      this.gruposDiasService.cargarAnio(this.anioGrupos()),
     ]);
+    this.reconstruirGrupos();
     // Carga registros del año activo (o el más reciente) para poblar vendedores/productos.
     if (this.datasetService.registros().length === 0) {
       const anio = this.datasetService.anioActivo() ?? this.datasetService.aniosDisponibles()[0]?.anio;
@@ -590,6 +678,95 @@ export class DatosComponent implements OnInit {
       setTimeout(() => this.focoGuardado.set(''), 3000);
     } catch {
       this.focoGuardado.set('No se pudo guardar en este navegador.');
+    }
+  }
+
+  // ============ Metas por grupo + días laborales ============
+  anioGrupos = signal<number>(this.anioActual);
+  gruposGrid = signal<Record<string, number[]>>({});
+  diasGrid = signal<number[]>(Array(12).fill(0));
+  guardandoGrupos = signal(false);
+  guardandoDias = signal(false);
+  gruposGuardado = signal('');
+  diasGuardado = signal('');
+
+  private reconstruirGrupos(): void {
+    const metas = this.gruposDiasService.metasGrupo();
+    const g: Record<string, number[]> = {};
+    for (const grupo of GRUPOS) g[grupo] = [...(metas[grupo] ?? Array(12).fill(0))];
+    this.gruposGrid.set(g);
+    this.diasGrid.set([...this.gruposDiasService.diasLaborales()]);
+  }
+
+  async cambiarAnioGrupos(anio: number): Promise<void> {
+    this.anioGrupos.set(anio);
+    this.gruposGuardado.set('');
+    this.diasGuardado.set('');
+    await this.gruposDiasService.cargarAnio(anio);
+    this.reconstruirGrupos();
+  }
+
+  valorMetaGrupo(g: string, mesIdx: number): number {
+    return this.gruposGrid()[g]?.[mesIdx] ?? 0;
+  }
+  setMetaGrupo(g: string, mesIdx: number, valor: unknown): void {
+    const n = Math.max(0, Number(valor) || 0);
+    const grid = { ...this.gruposGrid() };
+    const fila = [...(grid[g] ?? Array(12).fill(0))];
+    fila[mesIdx] = n;
+    grid[g] = fila;
+    this.gruposGrid.set(grid);
+    this.gruposGuardado.set('');
+  }
+  totalAnioGrupo(g: string): number {
+    return (this.gruposGrid()[g] ?? []).reduce((a, b) => a + b, 0);
+  }
+  totalMesGrupo(mesIdx: number): number {
+    let t = 0;
+    const grid = this.gruposGrid();
+    for (const g of Object.keys(grid)) t += grid[g][mesIdx] ?? 0;
+    return t;
+  }
+  totalGeneralGrupo(): number {
+    return Object.keys(this.gruposGrid()).reduce((a, g) => a + this.totalAnioGrupo(g), 0);
+  }
+
+  valorDias(mesIdx: number): number {
+    return this.diasGrid()[mesIdx] ?? 0;
+  }
+  setDias(mesIdx: number, valor: unknown): void {
+    const n = Math.max(0, Math.min(31, Number(valor) || 0));
+    const dias = [...this.diasGrid()];
+    dias[mesIdx] = n;
+    this.diasGrid.set(dias);
+    this.diasGuardado.set('');
+  }
+
+  async guardarMetasGrupo(): Promise<void> {
+    this.guardandoGrupos.set(true);
+    this.gruposGuardado.set('');
+    try {
+      await this.gruposDiasService.guardarMetasGrupo(this.anioGrupos(), this.gruposGrid());
+      this.gruposGuardado.set('✓ Metas por grupo guardadas');
+      setTimeout(() => this.gruposGuardado.set(''), 3000);
+    } catch (e) {
+      this.gruposGuardado.set('Error: ' + ((e as Error).message || 'no se pudo guardar'));
+    } finally {
+      this.guardandoGrupos.set(false);
+    }
+  }
+
+  async guardarDias(): Promise<void> {
+    this.guardandoDias.set(true);
+    this.diasGuardado.set('');
+    try {
+      await this.gruposDiasService.guardarDiasLaborales(this.anioGrupos(), this.diasGrid());
+      this.diasGuardado.set('✓ Días laborales guardados');
+      setTimeout(() => this.diasGuardado.set(''), 3000);
+    } catch (e) {
+      this.diasGuardado.set('Error: ' + ((e as Error).message || 'no se pudo guardar'));
+    } finally {
+      this.guardandoDias.set(false);
     }
   }
 
