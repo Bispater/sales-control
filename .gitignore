@@ -44,3 +44,7 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Respaldos de datos reales (PII) y scripts de demo — NO versionar
+/respaldo-datos-*/
+/scripts-demo/

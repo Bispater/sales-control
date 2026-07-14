@@ -1161,7 +1161,44 @@ export class EquipoComponent implements OnInit, OnDestroy {
 
   cobranza = computed<{ items: CobranzaItem[]; totalMora: number }>(() => {
     if (!this.vendedorSeleccionado()) return { items: [], totalMora: 0 };
-    const items = this.cobranzaApp();
+
+    // Si en el futuro se carga cobranza real, esos datos tienen prioridad.
+    if (this.cobranzaApp().length) {
+      const items = this.cobranzaApp();
+      return { items, totalMora: items.reduce((acc, it) => acc + it.moraClp, 0) };
+    }
+
+    // DEMO: cobranza ficticia derivada de la cartera real del vendedor.
+    // Determinista (hash del cliente) => estable entre renders y distinta por vendedor.
+    // TODO: reemplazar por la integración real de cobranza.
+    const porCliente = new Map<string, { cliente: string; bruta: number }>();
+    for (const r of this.registrosVendedor().anio) {
+      const nombre = (r.nombreCliente || '').trim() || 'Cliente';
+      const key = (r.clienteRut || nombre).trim();
+      const acc = porCliente.get(key) ?? { cliente: nombre, bruta: 0 };
+      acc.bruta += r.ventaTotalBruta || 0;
+      porCliente.set(key, acc);
+    }
+    const hash = (s: string) => {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return h;
+    };
+    const ordenados = [...porCliente.entries()].sort((a, b) => b[1].bruta - a[1].bruta);
+    // ~40% de la cartera "en mora"; si quedan muy pocos, tomamos el top para
+    // que la tabla nunca aparezca vacía cuando el vendedor tiene ventas.
+    let enMora = ordenados.filter(([key]) => hash(key) % 5 < 2);
+    if (enMora.length < 3) enMora = ordenados.slice(0, Math.min(3, ordenados.length));
+    const items = enMora
+      .map(([key, c]) => {
+        const h = hash(key);
+        const dias = 15 + (h % 106); // 15..120 días de atraso
+        const moraClp = Math.round(Math.abs(c.bruta) * (0.15 + (h % 40) / 100)); // 15%..54% de su bruta
+        return { cliente: c.cliente, dias, porcentaje: Math.min(100, Math.round((dias / 120) * 100)), moraClp };
+      })
+      .filter((it) => it.moraClp > 0)
+      .sort((a, b) => b.moraClp - a.moraClp)
+      .slice(0, 6);
     const totalMora = items.reduce((acc, it) => acc + it.moraClp, 0);
     return { items, totalMora };
   });
