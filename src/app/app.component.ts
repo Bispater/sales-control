@@ -5,11 +5,12 @@ import { filter, map, startWith } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SidebarComponent } from './shared/sidebar/sidebar.component';
 import { TopbarComponent } from './shared/topbar/topbar.component';
+import { ChatIaComponent } from './shared/chat-ia/chat-ia.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, RouterOutlet, SidebarComponent, TopbarComponent, ChatIaComponent],
   template: `
     <ng-container *ngIf="!esLogin(); else loginLayout">
       <div class="min-h-screen flex bg-slate-50">
@@ -36,6 +37,9 @@ import { TopbarComponent } from './shared/topbar/topbar.component';
           </main>
         </div>
       </div>
+
+      <!-- Burbuja de chat: fuera del layout, disponible en toda la app menos el login. -->
+      <app-chat-ia></app-chat-ia>
     </ng-container>
     <ng-template #loginLayout>
       <router-outlet></router-outlet>

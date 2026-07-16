@@ -133,6 +133,7 @@ export class HeaderComponent {
     { path: '/productos', label: 'Productos' },
     { path: '/tareas', label: 'Tareas' },
     { path: '/datos', label: 'Datos' },
+    { path: '/cotizador', label: 'Cotizador' },
   ];
 
   constructor() {

@@ -48,3 +48,6 @@ Thumbs.db
 # Respaldos de datos reales (PII) y scripts de demo — NO versionar
 /respaldo-datos-*/
 /scripts-demo/
+
+# Temporales del CLI de Supabase
+supabase/.temp/

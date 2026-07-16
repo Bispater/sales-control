@@ -51,5 +51,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/datos/datos.component').then((m) => m.DatosComponent),
     title: 'Datos | Control de Ventas',
   },
+  {
+    path: 'cotizador',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/cotizador/cotizador.component').then((m) => m.CotizadorComponent),
+    title: 'Cotizador | Control de Ventas',
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];
